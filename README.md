@@ -1,5 +1,4 @@
-# GS-232b-Interface
-
+# GS-232B Interface Software
 
 A small Windows app that points a Yaesu GS-232B controlled az/el rotator at amateur radio satellites.
 
@@ -17,13 +16,17 @@ dotnet run --project src/SatTrack.App
 
 Or open `SatTrack.sln` in Visual Studio 2022 and press F5.
 
-To make a single `SatTrack.exe` you can copy to another PC, run this. The exe is large because it bundles the .NET runtime, but it needs nothing else installed:
+To make a single `GS232B-Interface.exe` you can copy to another PC, run this. The exe is large because it bundles the .NET runtime, but it needs nothing else installed:
 
 ```
 dotnet publish src/SatTrack.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
 ```
 
 Use `--self-contained false` for a small exe on PCs that already have the .NET 8 Desktop Runtime.
+
+To build an installer, publish as above, then open `installer/GS232B-Interface.iss` in [Inno Setup](https://jrsoftware.org/isdl.php) 6.3+ and press Compile. The setup exe appears in `installer-output/`.
+
+(The code folders and solution are still named `SatTrack`; that's internal only.)
 
 ## First run
 
@@ -42,12 +45,21 @@ Use `--self-contained false` for a small exe on PCs that already have the .NET 8
 | **Enable** | Arms the app. It sends no movement commands until you press this. When armed, the button turns red and reads **Disarm**. |
 | **Disarm** / **Esc** | Stops sending commands and sends `S` (all stop) immediately. Esc works from anywhere in the window. Disconnecting or closing the app also disarms. |
 | **Track** | Follows the selected satellite. If you're not armed, the gauges still show the target, so you can preview a pass. Changing satellites stops tracking. |
-| **Simulate** | Swaps in a simulated rotator and clock (see below). |
 | **On top** | Keeps the window above other windows. |
-| **Menu** | Settings, *Update orbital data* (F5), satellite lists, map and theme options. |
+| **Menu** | Settings, *Update orbital data* (F5), *Manual slew* (Ctrl+M), *Simulation mode*, *Serial debug window* (Ctrl+D), satellite lists, map and theme options. |
 | Map chips | Bottom-right of the map: *Mercator / Planar* and *Dark / Light*. Mouse wheel zooms; double-click resets. |
 
 While tracking, the rotator moves to the rise point a couple of minutes before each pass, follows the satellite, then holds or parks. It aims slightly ahead of the satellite (default 2 s) to make up for rotator lag. It only sends a new position when the target has moved by your threshold (default 2°), so the motors don't chatter.
+
+### Manual slew
+
+**Menu > Manual slew** (Ctrl+M) opens a small window where you type an azimuth and elevation and press **Slew** (or Enter).
+
+- Values are in rotator coordinates: in 0–450° mode, azimuths over 360 use the overlap; in 0–180° elevation mode, over 90 means flipped.
+- The rotator must be connected and enabled. Slewing stops tracking.
+- **Stop** halts motion but stays enabled. **Use current** fills in where the rotator is now. **Park** goes to the park position from Settings.
+- Esc disarms from this window too.
+- The window stays open beside the main one, and the gauges show the commanded position as the target.
 
 ### Cable wrap and flip
 
@@ -61,13 +73,23 @@ The map's info box shows "flip" when a pass will use it. The azimuth gauge shade
 
 ### Simulation
 
-Turn on **Simulate**, then **Connect**. This connects a simulated rotator that moves at roughly G-5500 speeds (6°/s azimuth, 2.7°/s elevation) with the same travel limits as your settings.
+Turn on **Menu > Simulation mode**, then **Connect**. While it's on, a *Simulation* label, a **Next pass** button and a speed box appear on the toolbar. This connects a simulated rotator that moves at roughly G-5500 speeds (6°/s azimuth, 2.7°/s elevation) with the same travel limits as your settings.
 
 - **Next pass** jumps the clock to just before the next pass of the selected satellite.
 - The speed box runs time at 1×, 5×, 20× or 60×.
 - Press **Enable** and **Track** to watch a whole pass, including pre-positioning, flips and parking.
 
-Turning simulation off disconnects the simulated rotator and returns to real time.
+Turning **Simulation mode** off disconnects the simulated rotator and returns to real time.
+
+## Serial debug window
+
+**Menu > Serial debug window** (Ctrl+D) shows every command sent to the controller (TX) and every reply (RX), with millisecond UTC timestamps. It also shows connection events, errors and the app's status messages.
+
+- Carriage returns and line feeds are shown as `\r` and `\n`, so you can see exactly what the controller sends back, including echoes and `?>` errors.
+- *Hide position polls* filters out the once-a-second `C2` / `AZ=… EL=…` exchange so the moves and errors stand out.
+- **Save log…** writes the whole session (not just what's on screen) to a `.log` text file. **Copy selected** and Ctrl+C copy lines to the clipboard.
+- The log starts when the app opens, so you can open the window after a problem and still see what happened. It keeps the most recent million lines, about a week of continuous polling.
+- In simulation mode the window shows the commands a real GS-232B would have received.
 
 ## Satellite lists
 
@@ -101,10 +123,11 @@ The built-in list has 96 satellites from AMSAT's daily element distribution, wit
 
 - **Orbital elements:** these come from the AMSAT daily file (`https://www.amsat.org/tle/dailytle.txt`, one request for every amateur satellite). Anything missing there is requested from CelesTrak by catalog number, in OMM JSON format, which also handles the 6-digit catalog numbers that no longer fit in a TLE. Downloads are cached, refresh automatically after 12 hours, and the app works offline from the cache.
 - **Map:** Natural Earth 1:50m land and borders (public domain), embedded in the exe.
-- **Settings and cache:** `%LOCALAPPDATA%\SatTrack\`.
+- **Settings and cache:** `%LOCALAPPDATA%\GS-232B Interface Software\`.
 
 ## Troubleshooting the GS-232B
 
+- **Anything odd:** open the serial debug window and look at the raw TX/RX lines; save the log if you want to share it.
 - **"The port opened but the controller didn't report a position":** check the baud rate and the cable, and that the controller is powered. You can test by hand in PuTTY (serial, 9600 8N1): type `C2` and Enter, and you should see `AZ=xxx  EL=xxx`.
 - **"The port is in use by another program":** close other rotator software (e.g. PstRotator, SatPC32) or other terminals.
 - **Rotator points the wrong way by 180°:** the app expects controller azimuth 0 to be north. If your controller is set up for south-centre operation, switch it back to north-centre.
@@ -131,6 +154,6 @@ The tracking engine runs on a background thread and publishes an immutable snaps
 
 ## Licences
 
-- SatTrack source: yours to use as you like.
+- This software's source: yours to use as you like.
 - SGP.NET: MIT, © 2019 Colby Newman (see `third_party/SGP.NET/LICENSE`).
 - Natural Earth data: public domain.

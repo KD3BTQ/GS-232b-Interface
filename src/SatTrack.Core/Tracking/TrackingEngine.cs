@@ -29,6 +29,9 @@ public sealed record TrackerSnapshot
     public bool Armed { get; init; }
     public bool Tracking { get; init; }
 
+    /// <summary>True while a manual slew position is being held.</summary>
+    public bool Manual { get; init; }
+
     public StationLocation? Station { get; init; }
     public RotatorLimits Limits { get; init; } = new();
 
@@ -92,6 +95,7 @@ public sealed class TrackingEngine : IDisposable
     private DateTime _lastLoopUtc;
     private bool _parkPending;
     private bool _wasInPass;
+    private RotatorPosition? _manualTarget; // guarded by _gate
     private DateTime _trackComputedUtc = DateTime.MinValue;
     private IReadOnlyList<GeoPoint> _trackPast = Array.Empty<GeoPoint>();
     private IReadOnlyList<GeoPoint> _trackFuture = Array.Empty<GeoPoint>();
@@ -298,6 +302,7 @@ public sealed class TrackingEngine : IDisposable
             _rotator = null;
             _connection = RotatorConnection.Disconnected;
             _rotatorPosition = null;
+            _manualTarget = null;
             _lastCommand = null;
         }
         if (r is null) return;
@@ -342,6 +347,7 @@ public sealed class TrackingEngine : IDisposable
         {
             r = _rotator;
             _lastCommand = null;
+            _manualTarget = null;
         }
 
         if (r is not null)
@@ -361,7 +367,11 @@ public sealed class TrackingEngine : IDisposable
 
     public void StartTracking()
     {
-        lock (_gate) _lastCommand = null;
+        lock (_gate)
+        {
+            _lastCommand = null;
+            _manualTarget = null;
+        }
         _parkPending = false;
         _tracking = true;
         Raise(_armed ? "Tracking started." : "Tracking started. Press Enable to let the rotator move.");
@@ -386,6 +396,57 @@ public sealed class TrackingEngine : IDisposable
             }
         }
         Raise("Tracking stopped.");
+    }
+
+    /// <summary>
+    /// Sends the rotator to a fixed position (rotator coordinates; azimuth may be in the
+    /// 360-450° overlap). Stops tracking. Requires a connected, enabled rotator.
+    /// </summary>
+    public bool ManualGoTo(double azimuth, double elevation, out string? error)
+    {
+        error = null;
+        RotatorLimits limits;
+        lock (_gate)
+        {
+            if (_connection != RotatorConnection.Connected) { error = "Connect to the rotator first."; return false; }
+            limits = _limits;
+        }
+        if (!_armed) { error = "Press Enable first. The rotator only moves when it's enabled."; return false; }
+
+        double az = Math.Clamp(azimuth, 0, limits.MaxAzimuth);
+        double el = Math.Clamp(elevation, 0, limits.MaxElevation);
+
+        bool wasTracking = _tracking;
+        _tracking = false; // no stop command: the new position supersedes the old one
+        lock (_gate)
+        {
+            _manualTarget = new RotatorPosition(az, el);
+            _lastCommand = null; // the loop sends it on its next pass (within ~0.1 s)
+        }
+        Raise((wasTracking ? "Tracking stopped. " : "") + $"Manual slew to az {az:0}°, el {el:0}°.");
+        return true;
+    }
+
+    /// <summary>Stops motion and cancels any manual slew, but stays enabled.</summary>
+    public void StopMotion()
+    {
+        IRotator? r;
+        lock (_gate)
+        {
+            r = _rotator;
+            _manualTarget = null;
+            _lastCommand = null;
+        }
+        if (r is null) return;
+        _tracking = false;
+        _ = Task.Run(async () =>
+        {
+            await _io.WaitAsync().ConfigureAwait(false);
+            try { r.Stop(); }
+            catch (Exception ex) { Raise($"Stop command failed: {ex.Message}"); }
+            finally { _io.Release(); }
+        });
+        Raise("Rotator stopped.");
     }
 
     // ------------------------------------------------------------------ loop
@@ -524,14 +585,29 @@ public sealed class TrackingEngine : IDisposable
         }
 
         RotatorPosition? rotPos;
-        lock (_gate) rotPos = _rotatorPosition;
+        RotatorPosition? manual;
+        lock (_gate)
+        {
+            rotPos = _rotatorPosition;
+            manual = _manualTarget;
+        }
 
         // ---- decide where the rotator should point
         RotatorPosition? target = null;
         bool flipped = false;
         string activity;
 
-        if (station is null)
+        if (manual is RotatorPosition mt && !_tracking)
+        {
+            target = mt;
+            bool there = rotPos is RotatorPosition rp
+                         && Math.Abs(rp.Azimuth - mt.Azimuth) <= 1.5 && Math.Abs(rp.Elevation - mt.Elevation) <= 1.5;
+            activity = there
+                ? $"Manual: holding az {mt.Azimuth:0}°, el {mt.Elevation:0}°."
+                : $"Manual: slewing to az {mt.Azimuth:0}°, el {mt.Elevation:0}°.";
+            if (!_armed) activity = "Manual position set. Press Enable to move.";
+        }
+        else if (station is null)
         {
             activity = "Set your location in Settings.";
         }
@@ -641,6 +717,7 @@ public sealed class TrackingEngine : IDisposable
             RotatorDescription = description,
             Armed = armed,
             Tracking = _tracking,
+            Manual = manual is not null && !_tracking,
             Station = station,
             Limits = limits,
             SatelliteName = predictor?.Name,

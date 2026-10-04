@@ -20,6 +20,7 @@ public sealed class MainForm : Form
     private IRotator? _rotator;
     private readonly CommLog _commLog = new();
     private DebugForm? _debugForm;
+    private ManualSlewForm? _slewForm;
     private Palette _palette = Palette.Dark;
     private bool _simulating;
     private bool _connecting;
@@ -147,6 +148,7 @@ public sealed class MainForm : Form
         var miLoad = new ToolStripMenuItem("Load satellite list…", null, (_, _) => LoadListFromFile());
         var miBuiltIn = new ToolStripMenuItem("Use built-in satellite list", null, (_, _) => LoadCatalog(null, showErrors: true));
         var miExport = new ToolStripMenuItem("Save built-in list as…", null, (_, _) => ExportBuiltIn());
+        var miSlew = new ToolStripMenuItem("Manual slew…", null, (_, _) => ShowSlewWindow()) { ShortcutKeys = Keys.Control | Keys.M };
         var miDebug = new ToolStripMenuItem("Serial debug window…", null, (_, _) => ShowDebugWindow()) { ShortcutKeys = Keys.Control | Keys.D };
         _miMercator.Click += (_, _) => SetProjection(MapProjection.Mercator);
         _miPlanar.Click += (_, _) => SetProjection(MapProjection.Planar);
@@ -156,7 +158,7 @@ public sealed class MainForm : Form
         _menu.DropDownItems.AddRange(new ToolStripItem[]
         {
             miSettings, miUpdate, new ToolStripSeparator(),
-            _miSimulate, miDebug, new ToolStripSeparator(),
+            miSlew, _miSimulate, miDebug, new ToolStripSeparator(),
             miLoad, miBuiltIn, miExport, new ToolStripSeparator(),
             _miMercator, _miPlanar, _miDark, new ToolStripSeparator(),
             _miOnTop,
@@ -584,6 +586,18 @@ public sealed class MainForm : Form
         _debugForm = new DebugForm(_commLog) { Owner = this };
         _debugForm.FormClosed += (_, _) => _debugForm = null;
         _debugForm.Show(this);
+    }
+
+    private void ShowSlewWindow()
+    {
+        if (_slewForm is { IsDisposed: false })
+        {
+            _slewForm.Activate();
+            return;
+        }
+        _slewForm = new ManualSlewForm(_engine, () => _settings) { Owner = this };
+        _slewForm.FormClosed += (_, _) => _slewForm = null;
+        _slewForm.Show(this);
     }
 
     // ---------------------------------------------------------------- settings & view
