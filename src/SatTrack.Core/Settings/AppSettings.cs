@@ -58,7 +58,7 @@ public sealed class AppSettings
 public static class SettingsStore
 {
     public static string AppDataFolder =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SatTrack");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GS-232B Interface Software");
 
     public static string SettingsPath => Path.Combine(AppDataFolder, "settings.json");
 

@@ -18,6 +18,8 @@ public sealed class MainForm : Form
     private SatelliteCatalog _catalog = SatelliteCatalog.LoadBuiltIn();
     private SimulationClock? _simClock;
     private IRotator? _rotator;
+    private readonly CommLog _commLog = new();
+    private DebugForm? _debugForm;
     private Palette _palette = Palette.Dark;
     private bool _simulating;
     private bool _connecting;
@@ -31,7 +33,7 @@ public sealed class MainForm : Form
     private readonly ToolStripButton _btnConnect = new("Connect") { ToolTipText = "Connect to the rotator and read its position" };
     private readonly ToolStripButton _btnEnable = new("Enable") { ToolTipText = "Allow the app to move the rotator (Esc disarms at any time)" };
     private readonly ToolStripButton _btnTrack = new("Track") { ToolTipText = "Follow the selected satellite" };
-    private readonly ToolStripButton _btnSim = new("Simulate") { ToolTipText = "Use a simulated rotator and clock to see how tracking looks" };
+    private readonly ToolStripLabel _lblSim = new("Simulation") { ToolTipText = "Simulation mode is on (Menu > Simulation mode to turn it off)" };
     private readonly ToolStripButton _btnNextPass = new("Next pass") { ToolTipText = "Jump the simulation clock to just before the next pass" };
     private readonly ToolStripComboBox _speedCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, AutoSize = false, Width = 64, ToolTipText = "Simulation speed" };
     private readonly ToolStripDropDownButton _menu = new("Menu") { Alignment = ToolStripItemAlignment.Right };
@@ -41,6 +43,7 @@ public sealed class MainForm : Form
     private readonly ToolStripMenuItem _miPlanar = new("Planar map (centred on you)");
     private readonly ToolStripMenuItem _miDark = new("Dark mode");
     private readonly ToolStripMenuItem _miOnTop = new("Always on top");
+    private readonly ToolStripMenuItem _miSimulate = new("Simulation mode") { ToolTipText = "Use a simulated rotator and clock to see how tracking looks" };
 
     private readonly StatusStrip _status = new() { SizingGrip = true };
     private readonly ToolStripStatusLabel _lblConn = new();
@@ -66,7 +69,7 @@ public sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9f);
-        Text = "SatTrack";
+        Text = AppInfo.Name;
         MinimumSize = new Size(560, 360);
         Size = new Size(1100, 720);
         StartPosition = FormStartPosition.CenterScreen;
@@ -106,6 +109,7 @@ public sealed class MainForm : Form
 
         _engine.Message += msg =>
         {
+            _commLog.Info(msg);
             if (IsHandleCreated && !IsDisposed)
                 BeginInvoke(new Action(() => ShowMessage(msg)));
         };
@@ -132,7 +136,7 @@ public sealed class MainForm : Form
         _btnConnect.Click += async (_, _) => await OnConnectClick();
         _btnEnable.Click += (_, _) => OnEnableClick();
         _btnTrack.Click += (_, _) => OnTrackClick();
-        _btnSim.Click += async (_, _) => await ToggleSimulation();
+        _miSimulate.Click += async (_, _) => await ToggleSimulation();
         _btnNextPass.Click += (_, _) => JumpToNextPass();
         _btnOnTop.CheckedChanged += (_, _) => SetAlwaysOnTop(_btnOnTop.Checked);
 
@@ -143,6 +147,7 @@ public sealed class MainForm : Form
         var miLoad = new ToolStripMenuItem("Load satellite list…", null, (_, _) => LoadListFromFile());
         var miBuiltIn = new ToolStripMenuItem("Use built-in satellite list", null, (_, _) => LoadCatalog(null, showErrors: true));
         var miExport = new ToolStripMenuItem("Save built-in list as…", null, (_, _) => ExportBuiltIn());
+        var miDebug = new ToolStripMenuItem("Serial debug window…", null, (_, _) => ShowDebugWindow()) { ShortcutKeys = Keys.Control | Keys.D };
         _miMercator.Click += (_, _) => SetProjection(MapProjection.Mercator);
         _miPlanar.Click += (_, _) => SetProjection(MapProjection.Planar);
         _miDark.Click += (_, _) => SetDarkMode(!_settings.DarkMode);
@@ -151,6 +156,7 @@ public sealed class MainForm : Form
         _menu.DropDownItems.AddRange(new ToolStripItem[]
         {
             miSettings, miUpdate, new ToolStripSeparator(),
+            _miSimulate, miDebug, new ToolStripSeparator(),
             miLoad, miBuiltIn, miExport, new ToolStripSeparator(),
             _miMercator, _miPlanar, _miDark, new ToolStripSeparator(),
             _miOnTop,
@@ -160,7 +166,7 @@ public sealed class MainForm : Form
         {
             _satCombo, new ToolStripSeparator(),
             _btnConnect, _btnEnable, _btnTrack, new ToolStripSeparator(),
-            _btnSim, _btnNextPass, _speedCombo,
+            _lblSim, _btnNextPass, _speedCombo,
             _menu, _btnOnTop,
         });
     }
@@ -197,7 +203,7 @@ public sealed class MainForm : Form
         base.OnShown(e);
 
         if (_settings.GetStation() is null)
-            OpenSettings("Welcome to SatTrack. Enter where your rotator is (a grid square like FM19la, or latitude, longitude) and the COM port of the GS-232B.");
+            OpenSettings($"Welcome to the {AppInfo.Name}. Enter where your rotator is (a grid square like FM19la, or latitude, longitude) and the COM port of the GS-232B.");
 
         if (_elements.IsStale)
             await RefreshElementsAsync(force: false);
@@ -343,11 +349,13 @@ public sealed class MainForm : Form
             {
                 MaxAzimuth = _settings.MaxAzimuth,
                 MaxElevation = _settings.MaxElevation,
+                Log = _commLog,
             }
             : new Gs232bRotator(_settings.ComPort, _settings.BaudRate)
             {
                 MaxAzimuth = _settings.MaxAzimuth,
                 MaxElevation = _settings.MaxElevation,
+                Log = _commLog,
             };
 
         _connecting = true;
@@ -403,22 +411,25 @@ public sealed class MainForm : Form
             _simClock = new SimulationClock(DateTime.UtcNow) { Rate = _settings.SimulationSpeed };
             _engine.SetClock(_simClock);
             ShowMessage("Simulation on. Connect uses a simulated rotator; Next pass skips ahead in time.");
+            _commLog.Info("Simulation mode on");
         }
         else
         {
             _engine.SetClock(SystemClock.Instance);
             _simClock = null;
             ShowMessage("Simulation off. Back to real time.");
+            _commLog.Info("Simulation mode off");
         }
         UpdateSimulationUi();
     }
 
     private void UpdateSimulationUi()
     {
-        _btnSim.Checked = _simulating;
+        _miSimulate.Checked = _simulating;
+        _lblSim.Visible = _simulating;
         _btnNextPass.Visible = _simulating;
         _speedCombo.Visible = _simulating;
-        Text = _simulating ? "SatTrack (simulation)" : "SatTrack";
+        Text = _simulating ? $"{AppInfo.Name} (simulation)" : AppInfo.Name;
     }
 
     private void JumpToNextPass()
@@ -560,6 +571,21 @@ public sealed class MainForm : Form
         }
     }
 
+    // ---------------------------------------------------------------- debug window
+
+    private void ShowDebugWindow()
+    {
+        if (_debugForm is { IsDisposed: false })
+        {
+            if (_debugForm.WindowState == FormWindowState.Minimized) _debugForm.WindowState = FormWindowState.Normal;
+            _debugForm.Activate();
+            return;
+        }
+        _debugForm = new DebugForm(_commLog) { Owner = this };
+        _debugForm.FormClosed += (_, _) => _debugForm = null;
+        _debugForm.Show(this);
+    }
+
     // ---------------------------------------------------------------- settings & view
 
     private void OpenSettings(string? notice)
@@ -643,6 +669,8 @@ public sealed class MainForm : Form
             combo.ComboBox.ForeColor = _palette.Text;
         }
         foreach (ToolStripItem item in _menu.DropDownItems) item.ForeColor = _palette.Text;
+        _lblSim.ForeColor = _palette.Target;
+        _lblSim.Tag = "keepcolor";
 
         _btnEnable.BackColor = Color.Empty; // re-applied on next tick
         _btnEnable.ForeColor = _palette.Text;

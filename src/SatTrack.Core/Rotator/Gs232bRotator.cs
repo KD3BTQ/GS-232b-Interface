@@ -38,6 +38,9 @@ public sealed class Gs232bRotator : IRotator
 
     public string PortName => _port.PortName;
 
+    /// <summary>Optional log of all traffic (shown in the serial debug window).</summary>
+    public CommLog? Log { get; set; }
+
     public string Description => $"GS-232B on {_port.PortName}";
 
     public bool IsOpen => _port.IsOpen;
@@ -60,9 +63,20 @@ public sealed class Gs232bRotator : IRotator
         lock (_lock)
         {
             if (_port.IsOpen) return;
-            _port.Open();
+            Log?.Info($"Opening {_port.PortName} at {_port.BaudRate} baud, 8N1, no flow control");
+            try
+            {
+                _port.Open();
+            }
+            catch (Exception ex)
+            {
+                Log?.Error($"Couldn't open {_port.PortName}: {ex.Message}");
+                throw;
+            }
             Thread.Sleep(100);
+            if (_port.BytesToRead > 0) Log?.Rx(_port.ReadExisting());
             _port.DiscardInBuffer();
+            Log?.Info($"{_port.PortName} open");
         }
     }
 
@@ -70,7 +84,11 @@ public sealed class Gs232bRotator : IRotator
     {
         lock (_lock)
         {
-            if (_port.IsOpen) _port.Close();
+            if (_port.IsOpen)
+            {
+                _port.Close();
+                Log?.Info($"{_port.PortName} closed");
+            }
         }
     }
 
@@ -134,12 +152,17 @@ public sealed class Gs232bRotator : IRotator
         lock (_lock)
         {
             EnsureOpen();
-            _port.DiscardInBuffer();
+            DiscardStale();
+            Log?.Tx(command + "\r");
             _port.Write(command + "\r");
 
             string reply = ReadFor(CommandSettleTime);
+            if (reply.Length > 0) Log?.Rx(reply);
             if (reply.Contains("?>"))
+            {
+                Log?.Error($"Controller rejected '{command}'");
                 throw new Gs232bException($"Controller rejected command '{command}'.");
+            }
         }
     }
 
@@ -149,9 +172,12 @@ public sealed class Gs232bRotator : IRotator
         lock (_lock)
         {
             EnsureOpen();
-            _port.DiscardInBuffer();
+            DiscardStale();
+            Log?.Tx(command + "\r");
             _port.Write(command + "\r");
-            return ReadFor(listenFor);
+            string reply = ReadFor(listenFor);
+            Log?.Rx(reply);
+            return reply;
         }
     }
 
@@ -160,7 +186,8 @@ public sealed class Gs232bRotator : IRotator
         lock (_lock)
         {
             EnsureOpen();
-            _port.DiscardInBuffer();
+            DiscardStale();
+            Log?.Tx(command + "\r");
             _port.Write(command + "\r");
 
             var buffer = new StringBuilder();
@@ -174,10 +201,20 @@ public sealed class Gs232bRotator : IRotator
                     string text = buffer.ToString();
 
                     if (text.Contains("?>"))
+                    {
+                        Log?.Rx(text);
+                        Log?.Error($"Controller rejected '{command}'");
                         throw new Gs232bException($"Controller rejected command '{command}'.");
+                    }
 
                     Match m = expected.Match(text);
-                    if (m.Success) return m;
+                    if (m.Success)
+                    {
+                        // Pick up the rest of the line ending if it's already arrived.
+                        if (_port.BytesToRead > 0) text += _port.ReadExisting();
+                        Log?.Rx(text);
+                        return m;
+                    }
                 }
                 else
                 {
@@ -185,6 +222,8 @@ public sealed class Gs232bRotator : IRotator
                 }
             }
 
+            if (buffer.Length > 0) Log?.Rx(buffer.ToString());
+            Log?.Error($"No valid reply to '{command}' within {ResponseTimeout.TotalMilliseconds:0} ms");
             throw new TimeoutException(
                 $"No valid reply to '{command}'. Received: '{Escape(buffer.ToString())}'");
         }
@@ -200,6 +239,17 @@ public sealed class Gs232bRotator : IRotator
             else Thread.Sleep(10);
         }
         return buffer.ToString();
+    }
+
+    /// <summary>Logs and drops anything unexpected waiting in the input buffer.</summary>
+    private void DiscardStale()
+    {
+        if (_port.BytesToRead > 0)
+        {
+            string stale = _port.ReadExisting();
+            Log?.Rx(stale + "   (unexpected, discarded)");
+        }
+        _port.DiscardInBuffer();
     }
 
     private void EnsureOpen()

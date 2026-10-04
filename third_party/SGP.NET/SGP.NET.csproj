@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Vendored copy of SGP.NET 1.6.0 (MIT License, Copyright (c) 2019 Colby Newman).
+    Source: https://github.com/parzivail/SGP.NET  - see LICENSE in this folder.
+    Vendored (rather than referenced from NuGet) because 1.6.0 contains SGP4 drag and
+    deep-space accuracy fixes. You can swap this for a PackageReference to SGP.NET
+    once a NuGet release with those fixes is available.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SGPdotNET</RootNamespace>
+    <AssemblyName>SGPdotNET</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);CS1591;CS8632</NoWarn>
+  </PropertyGroup>
+</Project>

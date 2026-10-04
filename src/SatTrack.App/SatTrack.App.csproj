@@ -9,8 +9,8 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <RootNamespace>SatTrack.App</RootNamespace>
-    <AssemblyName>SatTrack</AssemblyName>
-    <Product>SatTrack</Product>
+    <AssemblyName>GS232B-Interface</AssemblyName>
+    <Product>GS-232B Interface Software</Product>
     <Version>1.0.0</Version>
   </PropertyGroup>
 

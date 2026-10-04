@@ -51,7 +51,7 @@ public sealed class OrbitalElementsService
 
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         if (_http.DefaultRequestHeaders.UserAgent.Count == 0)
-            _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SatTrack", "1.0"));
+            _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("GS232B-Interface", "1.0"));
     }
 
     /// <summary>Loads whatever is in the cache folder. Safe to call when it's empty.</summary>

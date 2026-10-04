@@ -20,6 +20,6 @@ internal static class Program
 
     private static void ShowError(Exception ex)
     {
-        MessageBox.Show(ex.Message, "SatTrack: unexpected error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        MessageBox.Show(ex.Message, $"{AppInfo.Name}: unexpected error", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }

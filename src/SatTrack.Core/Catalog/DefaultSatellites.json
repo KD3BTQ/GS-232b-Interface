@@ -1,5 +1,5 @@
 {
-  "description": "Built-in SatTrack list: satellites in the AMSAT daily element distribution (October 2026). Copy this file to make your own list.",
+  "description": "Built-in list: satellites in the AMSAT daily element distribution (October 2026). Copy this file to make your own list.",
   "satellites": [
     {
       "name": "ISS",

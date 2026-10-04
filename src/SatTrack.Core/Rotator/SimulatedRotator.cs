@@ -28,6 +28,12 @@ public sealed class SimulatedRotator : IRotator
 
     public string Description => "Simulated rotator";
 
+    /// <summary>
+    /// Optional log. Commands and replies are logged in GS-232B format, so the debug window
+    /// shows what a real controller would see.
+    /// </summary>
+    public CommLog? Log { get; set; }
+
     public bool IsOpen { get { lock (_lock) return _open; } }
 
     public SimulatedRotator(IClock clock, double startAzimuth = 180, double startElevation = 0)
@@ -44,6 +50,7 @@ public sealed class SimulatedRotator : IRotator
         {
             _open = true;
             _lastUpdate = _clock.UtcNow;
+            Log?.Info("Simulated rotator connected (no serial port; traffic below is what a GS-232B would see)");
         }
     }
 
@@ -53,6 +60,7 @@ public sealed class SimulatedRotator : IRotator
         {
             Advance();
             _targetAz = _targetEl = null;
+            if (_open) Log?.Info("Simulated rotator disconnected");
             _open = false;
         }
     }
@@ -65,6 +73,8 @@ public sealed class SimulatedRotator : IRotator
         {
             EnsureOpen();
             Advance();
+            Log?.Tx("C2\r");
+            Log?.Rx($"AZ={Math.Round(_az):000}  EL={Math.Round(_el):000}\r\n");
             return QuantizeReadings
                 ? new RotatorPosition(Math.Round(_az), Math.Round(_el))
                 : new RotatorPosition(_az, _el);
@@ -89,6 +99,7 @@ public sealed class SimulatedRotator : IRotator
             Advance();
             _targetAz = Math.Clamp(Math.Round(azimuth), 0, MaxAzimuth);
             _targetEl = Math.Clamp(Math.Round(elevation), 0, MaxElevation);
+            Log?.Tx($"W{_targetAz:000} {_targetEl:000}\r");
         }
     }
 
@@ -98,6 +109,7 @@ public sealed class SimulatedRotator : IRotator
         {
             Advance();
             _targetAz = _targetEl = null;
+            if (_open) Log?.Tx("S\r");
         }
     }
 
