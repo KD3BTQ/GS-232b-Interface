@@ -1,0 +1,402 @@
+{
+  "description": "Built-in SatTrack list: satellites in the AMSAT daily element distribution (October 2026). Copy this file to make your own list.",
+  "satellites": [
+    {
+      "name": "ISS",
+      "noradId": 25544,
+      "notes": "International Space Station. ARISS FM voice, APRS digipeater and SSTV events."
+    },
+    {
+      "name": "SO-50",
+      "noradId": 27607,
+      "notes": "FM repeater"
+    },
+    {
+      "name": "AO-91",
+      "noradId": 43017,
+      "notes": "FM repeater (Fox-1B)"
+    },
+    {
+      "name": "PO-101",
+      "noradId": 43678,
+      "notes": "FM repeater (Diwata-2), scheduled activations"
+    },
+    {
+      "name": "IO-86",
+      "noradId": 40931,
+      "notes": "FM repeater (LAPAN-A2), low inclination"
+    },
+    {
+      "name": "AO-27",
+      "noradId": 22825,
+      "notes": "FM repeater"
+    },
+    {
+      "name": "RS-44",
+      "noradId": 44909,
+      "notes": "Linear transponder"
+    },
+    {
+      "name": "FO-29",
+      "noradId": 24278,
+      "notes": "Linear transponder"
+    },
+    {
+      "name": "AO-07",
+      "noradId": 7530,
+      "notes": "Linear transponder, sunlight only"
+    },
+    {
+      "name": "AO-73",
+      "noradId": 39444,
+      "notes": "Linear transponder and telemetry (FUNcube-1)"
+    },
+    {
+      "name": "HO-113",
+      "noradId": 50466,
+      "notes": "Linear transponder (CAS-5A)"
+    },
+    {
+      "name": "QO-100",
+      "noradId": 43700,
+      "notes": "Geostationary at 25.9°E. Not visible from the Americas."
+    },
+    {
+      "name": "CSS (TIANHE-1)",
+      "noradId": 48274,
+      "notes": "Chinese space station"
+    },
+    {
+      "name": "UO-11",
+      "noradId": 14781
+    },
+    {
+      "name": "LO-19",
+      "noradId": 20442
+    },
+    {
+      "name": "GO-32",
+      "noradId": 25397
+    },
+    {
+      "name": "NO-44",
+      "noradId": 26931
+    },
+    {
+      "name": "CO-55",
+      "noradId": 27844
+    },
+    {
+      "name": "RS-22",
+      "noradId": 27939
+    },
+    {
+      "name": "CO-65",
+      "noradId": 32785
+    },
+    {
+      "name": "CO-66",
+      "noradId": 32791
+    },
+    {
+      "name": "RS-30",
+      "noradId": 32953
+    },
+    {
+      "name": "SRMSAT",
+      "noradId": 37841
+    },
+    {
+      "name": "ZACUBE-1",
+      "noradId": 39417
+    },
+    {
+      "name": "Delfi-N3xt",
+      "noradId": 39428
+    },
+    {
+      "name": "GOMX-1",
+      "noradId": 39430
+    },
+    {
+      "name": "LO-74",
+      "noradId": 39440
+    },
+    {
+      "name": "DTUSAT-2",
+      "noradId": 40030
+    },
+    {
+      "name": "LILACSAT-2",
+      "noradId": 40908
+    },
+    {
+      "name": "Lapan A3",
+      "noradId": 41603
+    },
+    {
+      "name": "CAS-2T",
+      "noradId": 41847
+    },
+    {
+      "name": "TechnoSat",
+      "noradId": 42829
+    },
+    {
+      "name": "S-Net D",
+      "noradId": 43186
+    },
+    {
+      "name": "S-Net B",
+      "noradId": 43187
+    },
+    {
+      "name": "S-Net A",
+      "noradId": 43188
+    },
+    {
+      "name": "S-Net C",
+      "noradId": 43189
+    },
+    {
+      "name": "Ten-Koh",
+      "noradId": 43677
+    },
+    {
+      "name": "MinXSS-2",
+      "noradId": 43758
+    },
+    {
+      "name": "AO-95",
+      "noradId": 43770
+    },
+    {
+      "name": "SNUSat 2",
+      "noradId": 43782
+    },
+    {
+      "name": "SnugLite",
+      "noradId": 43784
+    },
+    {
+      "name": "ITASat 1",
+      "noradId": 43786
+    },
+    {
+      "name": "EAGLET 1",
+      "noradId": 43790
+    },
+    {
+      "name": "ESEO",
+      "noradId": 43792
+    },
+    {
+      "name": "JO-97",
+      "noradId": 43803
+    },
+    {
+      "name": "Suomi 100",
+      "noradId": 43804
+    },
+    {
+      "name": "ISAT",
+      "noradId": 43879
+    },
+    {
+      "name": "UWE-4",
+      "noradId": 43880
+    },
+    {
+      "name": "Prox-1",
+      "noradId": 44339
+    },
+    {
+      "name": "Taurus 1",
+      "noradId": 44530
+    },
+    {
+      "name": "TO-108",
+      "noradId": 44881
+    },
+    {
+      "name": "SALSAT",
+      "noradId": 46495
+    },
+    {
+      "name": "TeikyoSat 4",
+      "noradId": 49396
+    },
+    {
+      "name": "Z-Sat",
+      "noradId": 49399
+    },
+    {
+      "name": "KOSEN 1",
+      "noradId": 49402
+    },
+    {
+      "name": "SNUGLITE 2",
+      "noradId": 52899
+    },
+    {
+      "name": "UmKA 1 (RS40S)",
+      "noradId": 57172
+    },
+    {
+      "name": "CubeBel-2 (EU11S)",
+      "noradId": 57175
+    },
+    {
+      "name": "RS-38S",
+      "noradId": 57189
+    },
+    {
+      "name": "SONATE-2",
+      "noradId": 59112
+    },
+    {
+      "name": "GRBBeta",
+      "noradId": 60237
+    },
+    {
+      "name": "Curium One",
+      "noradId": 60242
+    },
+    {
+      "name": "ROBUSTA-3A",
+      "noradId": 60243
+    },
+    {
+      "name": "CatSat",
+      "noradId": 60246
+    },
+    {
+      "name": "AO-123",
+      "noradId": 61781
+    },
+    {
+      "name": "LASARsat",
+      "noradId": 62391
+    },
+    {
+      "name": "CroCube",
+      "noradId": 62394
+    },
+    {
+      "name": "JINJUSat 1B",
+      "noradId": 63210
+    },
+    {
+      "name": "NUSHSAT 1",
+      "noradId": 63211
+    },
+    {
+      "name": "TEVEL2-1",
+      "noradId": 63217
+    },
+    {
+      "name": "TEVEL2-2",
+      "noradId": 63219
+    },
+    {
+      "name": "TEVEL2-3",
+      "noradId": 63218
+    },
+    {
+      "name": "TEVEL2-4",
+      "noradId": 63213
+    },
+    {
+      "name": "TEVEL2-5",
+      "noradId": 63214
+    },
+    {
+      "name": "TEVEL2-6",
+      "noradId": 63215
+    },
+    {
+      "name": "TEVEL2-7",
+      "noradId": 63238
+    },
+    {
+      "name": "TEVEL2-8",
+      "noradId": 63239
+    },
+    {
+      "name": "TEVEL2-9",
+      "noradId": 63237
+    },
+    {
+      "name": "SPIRONE",
+      "noradId": 66657
+    },
+    {
+      "name": "K-HERO",
+      "noradId": 66660
+    },
+    {
+      "name": "SNUGLITE-III DURI",
+      "noradId": 66661
+    },
+    {
+      "name": "SAKHACUBE-CHOLBON",
+      "noradId": 67290
+    },
+    {
+      "name": "RS95S (QMR-KWT-2)",
+      "noradId": 67291
+    },
+    {
+      "name": "Ten-Koh2",
+      "noradId": 68261
+    },
+    {
+      "name": "JACK-002",
+      "noradId": 68417
+    },
+    {
+      "name": "DISCO 2",
+      "noradId": 68431
+    },
+    {
+      "name": "HADES-SA (SpinnyONE)",
+      "noradId": 68446
+    },
+    {
+      "name": "PARUS-6U1",
+      "noradId": 68456
+    },
+    {
+      "name": "SAL-E",
+      "noradId": 68458
+    },
+    {
+      "name": "FSI-SAT 2",
+      "noradId": 68792
+    },
+    {
+      "name": "OrigamiSat 2",
+      "noradId": 68795
+    },
+    {
+      "name": "ARICA 2",
+      "noradId": 68796
+    },
+    {
+      "name": "WASEDA-SAT-ZERO-II",
+      "noradId": 68797
+    },
+    {
+      "name": "MANGARO-II-Piscus",
+      "noradId": 68798
+    },
+    {
+      "name": "CO-128",
+      "noradId": 69912
+    },
+    {
+      "name": "MARINA",
+      "noradId": 69920
+    }
+  ]
+}
