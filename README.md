@@ -1,4 +1,5 @@
-# SatTrack
+# GS-232b-Interface
+
 
 A small Windows app that points a Yaesu GS-232B controlled az/el rotator at amateur radio satellites.
 
