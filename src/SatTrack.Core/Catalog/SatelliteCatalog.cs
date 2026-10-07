@@ -16,6 +16,12 @@ public sealed class SatelliteEntry
     /// <summary>Optional free text shown as a tooltip (mode, frequencies, schedule...).</summary>
     public string? Notes { get; set; }
 
+    /// <summary>Optional nominal downlink in MHz, pre-filled in the frequency panel.</summary>
+    public double? DownlinkMHz { get; set; }
+
+    /// <summary>Optional repeater offset (uplink minus downlink) in MHz.</summary>
+    public double? OffsetMHz { get; set; }
+
     /// <summary>
     /// Optional inline two-line elements. When present these are always used instead of
     /// downloaded data, which is handy for new launches or objects without public elements.

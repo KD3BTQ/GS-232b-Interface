@@ -63,8 +63,13 @@ public sealed class SatellitePredictor
     {
         try
         {
-            var o = _station.Observe(_satellite, Utc(utc));
-            return new LookAngles(GeoMath.Wrap360(o.Azimuth.Degrees), o.Elevation.Degrees, o.Range, o.RangeRate);
+            var t = Utc(utc);
+            var o = _station.Observe(_satellite, t);
+            // Range rate by central difference of range. (The library's own range rate is a few
+            // percent off, which matters for Doppler: ~400 Hz at 435 MHz.)
+            double r1 = _station.Observe(_satellite, t.AddMilliseconds(-500)).Range;
+            double r2 = _station.Observe(_satellite, t.AddMilliseconds(500)).Range;
+            return new LookAngles(GeoMath.Wrap360(o.Azimuth.Degrees), o.Elevation.Degrees, o.Range, r2 - r1);
         }
         catch
         {
@@ -97,7 +102,12 @@ public sealed class SatellitePredictor
         return list;
     }
 
-    private double El(DateTime t) => Observe(t)?.Elevation ?? -90;
+    /// <summary>Elevation only (no range rate), used by the pass search where speed matters.</summary>
+    private double El(DateTime t)
+    {
+        try { return _station.Observe(_satellite, Utc(t)).Elevation.Degrees; }
+        catch { return -90; }
+    }
 
     /// <summary>
     /// Returns the pass in progress at <paramref name="fromUtc"/>, or the next one within the search window.

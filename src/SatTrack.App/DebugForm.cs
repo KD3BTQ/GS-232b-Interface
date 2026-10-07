@@ -10,6 +10,8 @@ namespace SatTrack.App;
 public sealed class DebugForm : Form
 {
     private readonly CommLog _log;
+    private readonly string _device;
+    private readonly string _filePrefix;
     private readonly List<CommLogEntry> _shown = new();
     private long _readTotal;
 
@@ -25,18 +27,21 @@ public sealed class DebugForm : Form
     };
 
     private readonly CheckBox _autoScroll = new() { Text = "Auto-scroll", Checked = true, AutoSize = true, Margin = new Padding(3, 7, 12, 3) };
-    private readonly CheckBox _hidePolls = new() { Text = "Hide position polls (C2)", AutoSize = true, Margin = new Padding(3, 7, 12, 3) };
+    private readonly CheckBox _hidePolls = new() { Text = "Hide routine polls", AutoSize = true, Margin = new Padding(3, 7, 12, 3) };
     private readonly Label _count = new() { AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 250 };
 
-    public DebugForm(CommLog log)
+    /// <param name="device">"rotator" or "radio": used in the title and saved file.</param>
+    public DebugForm(CommLog log, string device, string filePrefix)
     {
         _log = log;
+        _device = device;
+        _filePrefix = filePrefix;
 
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Text = $"{AppInfo.Name}: serial debug";
+        Text = $"{AppInfo.Name}: {device} serial debug";
         Size = new Size(760, 420);
         MinimumSize = new Size(420, 200);
         StartPosition = FormStartPosition.CenterParent;
@@ -91,7 +96,7 @@ public sealed class DebugForm : Form
         if (added.Count == 0) { UpdateCount(); return; }
 
         foreach (var e in added)
-            if (!_hidePolls.Checked || !e.IsPositionPoll) _shown.Add(e);
+            if (!_hidePolls.Checked || !e.Routine) _shown.Add(e);
 
         UpdateList(scroll: true);
     }
@@ -102,7 +107,7 @@ public sealed class DebugForm : Form
         _readTotal = 0;
         var all = _log.GetSince(0, out _readTotal);
         foreach (var e in all)
-            if (!_hidePolls.Checked || !e.IsPositionPoll) _shown.Add(e);
+            if (!_hidePolls.Checked || !e.Routine) _shown.Add(e);
         UpdateList(scroll: true);
     }
 
@@ -176,13 +181,13 @@ public sealed class DebugForm : Form
         {
             Title = "Save serial log",
             Filter = "Log file (*.log)|*.log|Text file (*.txt)|*.txt",
-            FileName = $"GS232B-serial-{DateTime.Now:yyyyMMdd-HHmmss}.log",
+            FileName = $"{_filePrefix}-{DateTime.Now:yyyyMMdd-HHmmss}.log",
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         try
         {
-            _log.SaveTo(dlg.FileName, AppInfo.Name);
+            _log.SaveTo(dlg.FileName, AppInfo.Name, _device);
             MessageBox.Show(this, $"Saved the full session log to {dlg.FileName}.", "Saved",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
         }

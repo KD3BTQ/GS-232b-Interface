@@ -1,6 +1,6 @@
 # GS-232B Interface Software
 
-A small Windows app that points a Yaesu GS-232B controlled az/el rotator at amateur radio satellites.
+A small Windows app that points a Yaesu GS-232B controlled az/el rotator at amateur radio satellites and keeps a FlexRadio (or ICOM) transceiver on the Doppler-corrected frequency.
 
 - The top half of the window shows a map in Mercator or a planar view centred on your station. It includes the ground track, coverage circle and day/night shading.
 - The bottom half has an azimuth gauge and an elevation gauge. Each shows where the rotator is, where it's being sent and where the satellite is.
@@ -45,11 +45,45 @@ To build an installer, publish as above, then open `installer/GS232B-Interface.i
 | **Enable** | Arms the app. It sends no movement commands until you press this. When armed, the button turns red and reads **Disarm**. |
 | **Disarm** / **Esc** | Stops sending commands and sends `S` (all stop) immediately. Esc works from anywhere in the window. Disconnecting or closing the app also disarms. |
 | **Track** | Follows the selected satellite. If you're not armed, the gauges still show the target, so you can preview a pass. Changing satellites stops tracking. |
+| **Upcoming passes** | Opens a window listing every pass of every satellite in the list (see below). Also Ctrl+P. |
 | **On top** | Keeps the window above other windows. |
-| **Menu** | Settings, *Update orbital data* (F5), *Manual slew* (Ctrl+M), *Simulation mode*, *Serial debug window* (Ctrl+D), satellite lists, map and theme options. |
+| **Menu** | Settings, *Update orbital data* (F5), *Manual slew* (Ctrl+M), *Simulation mode*, *Rotator serial debug* (Ctrl+D), *Radio serial debug* (Ctrl+R), satellite lists, *Show frequency panel*, map and theme options. |
 | Map chips | Bottom-right of the map: *Mercator / Planar* and *Dark / Light*. Mouse wheel zooms; double-click resets. |
 
 While tracking, the rotator moves to the rise point a couple of minutes before each pass, follows the satellite, then holds or parks. It aims slightly ahead of the satellite (default 2 s) to make up for rotator lag. It only sends a new position when the target has moved by your threshold (default 2°), so the motors don't chatter.
+
+### Upcoming passes
+
+**Upcoming passes** (toolbar, or Ctrl+P) opens a window covering every satellite in the current satellite list.
+
+- Enter **Passes in the next** N **hours** or **days** (up to 30 days), and optionally **Highest point at least** N° to hide low passes. Press **Calculate** (or F5). The search runs in the background with a progress bar; the full built-in list over a week takes a few seconds.
+- The **table** lists each pass: satellite, rise time, highest elevation and when it happens, set time, duration, and rise and set azimuth. Click a column header to sort. Tick **Local time** to show times in your time zone instead of UTC. Geostationary satellites that never set from your location show as "always up".
+- The **map** shows the ground track of every pass in the table (Mercator or Planar, using the chips in its corner). Select rows to highlight their tracks; each highlighted track gets a dot and a label where the pass starts. When a search returns more than 600 passes, only the selected ones are drawn, to keep the map readable.
+- **Double-click** a row to select that satellite in the main window.
+- In simulation mode, "now" is the simulated time.
+
+### Frequency control (FlexRadio or ICOM)
+
+The top half of the window is split: the map on the left and the frequency panel on the right. Turn the panel off with **Menu > Show frequency panel** to get the full-width map back.
+
+1. Enter the satellite's nominal **Downlink MHz** (what it transmits). If it's a repeater, enter the **Offset MHz** (uplink minus downlink, e.g. -291.81 for an FM repeater with a 437.800 downlink and a 145.990 uplink). Press Enter or click away to apply. The app remembers the values for each satellite.
+2. The panel shows the Doppler shift now (and how fast it's changing), the corrected **Receive** frequency, the corrected **Transmit** frequency if there's an offset, the frequency the **Radio** reports, and a chart of the Doppler shift across the pass, with the time the satellite is above the horizon shaded.
+3. The radio buttons work like the rotator's: **Connect** opens the radio's port and reads its frequency, **Enable** allows frequency commands (it turns red and reads **Disarm**), **Track** keeps the radio on the corrected frequency. Esc disarms both the rotator and the radio.
+
+Details:
+
+- In **Settings > Radio**, choose the radio type:
+  - **FlexRadio (SmartSDR CAT port):** in the SmartSDR CAT app, create a CAT port (any COM number) and pick that port here. The app reads and sets slice A with the standard CAT commands `FA;` and `FA00014074000;` (frequency in Hz, 11 digits). Baud rate doesn't matter for SmartSDR's virtual ports. SmartSDR CAT must be running and connected to the radio.
+  - **ICOM (CI-V):** choose the COM port, set the baud rate to match the radio's CI-V menu, and enter its CI-V address in hex (for example 7C for an IC-9100, 74 for an IC-7700).
+- By default the radio is tuned to the corrected downlink (receive). Settings can switch it to the corrected uplink instead.
+- The radio is retuned whenever the corrected frequency moves by the retune step (default 10 Hz), at most five times a second. Turning the VFO knob while tracking is overridden on the next update; press **Track** again to stop.
+- The app keeps DTR and RTS low on the radio port, because SmartSDR CAT and many ICOM USB interfaces can use those lines for PTT or CW keying.
+- The radio's frequency is polled once a second (shown in the panel). Three failed polls disarm the radio and show "Radio connection lost".
+- **Frequency coverage:** most FlexRadio models (6400/6600/8000 series) tune up to 54 MHz; the FLEX-6700 also covers 135–165 MHz. A frequency the radio can't tune is rejected (`?;` from a Flex, NG from an ICOM) and the panel reports that the command failed. For 145/435 MHz satellites use a radio that covers them, or a transverter (enter the IF-side frequency).
+- The offset is a fixed difference between uplink and downlink, which is right for FM repeaters and for a single point in a non-inverting transponder passband. Inverting linear transponders need different arithmetic and aren't handled yet.
+- In simulation mode, **Connect** in the panel uses a simulated radio of the selected type, and the radio debug window shows the CAT commands or CI-V frames that would be sent.
+
+**Menu > Radio serial debug** (Ctrl+R) shows everything sent to and received from the radio: CAT commands as text (for example `FA00029400674; [set frequency 29.400674 MHz]`), or ICOM CI-V frames in hex with a description. For ICOM, echoes of the app's own frames, OK/NG replies and unsolicited broadcasts are labelled. Frequency polls count as routine and can be hidden. **Save log…** works the same as for the rotator.
 
 ### Manual slew
 
@@ -104,7 +138,7 @@ The built-in list has 96 satellites from AMSAT's daily element distribution, wit
   "description": "My list",
   "satellites": [
     { "name": "ISS",   "noradId": 25544, "notes": "Shown as a tooltip" },
-    { "name": "SO-50", "noradId": 27607 },
+    { "name": "SO-50", "noradId": 27607, "downlinkMHz": 436.795, "offsetMHz": -290.945 },
     {
       "name": "New cubesat",
       "tle1": "1 99999U 26001A   26276.50000000  .00000000  00000-0  00000-0 0  9999",
@@ -115,6 +149,7 @@ The built-in list has 96 satellites from AMSAT's daily element distribution, wit
 ```
 
 - `noradId` is used to fetch elements online.
+- `downlinkMHz` and `offsetMHz` are optional; they pre-fill the frequency panel the first time you pick that satellite.
 - `tle1` and `tle2` are optional. When present they are used instead of downloaded data, which is handy for new launches with no public elements yet.
 - Comments and trailing commas are allowed.
 - Entries with problems are skipped, and the status bar says why.
@@ -124,6 +159,13 @@ The built-in list has 96 satellites from AMSAT's daily element distribution, wit
 - **Orbital elements:** these come from the AMSAT daily file (`https://www.amsat.org/tle/dailytle.txt`, one request for every amateur satellite). Anything missing there is requested from CelesTrak by catalog number, in OMM JSON format, which also handles the 6-digit catalog numbers that no longer fit in a TLE. Downloads are cached, refresh automatically after 12 hours, and the app works offline from the cache.
 - **Map:** Natural Earth 1:50m land and borders (public domain), embedded in the exe.
 - **Settings and cache:** `%LOCALAPPDATA%\GS-232B Interface Software\`.
+
+## Troubleshooting the radio
+
+- **"The radio didn't answer" (Flex):** check that SmartSDR CAT is running and connected to the radio, and that the COM port you picked is a CAT port (not a PTT/CW-only port). Open the radio serial debug window: you should see `FA;` going out and `FA…;` coming back.
+- **"The radio didn't answer" (ICOM):** check the CI-V address and that the baud rate matches the radio's CI-V setting. In the debug window, if you see only your own frames echoed back, the radio isn't answering; if you see nothing at all, check the cable and port.
+- **"The radio rejected the command":** the frequency is outside what the radio can tune (see coverage above).
+- **Radio jumps back after you turn the knob:** that's tracking doing its job. Stop tracking to tune by hand.
 
 ## Troubleshooting the GS-232B
 
@@ -140,8 +182,9 @@ SatTrack.sln
 src/SatTrack.Core/        tracking logic, no UI (net8.0)
   Catalog/                satellite list model + built-in DefaultSatellites.json
   Geo/                    grid squares, station location, spherical maths
-  Orbit/                  element download/cache, SGP4 predictor, pass finder
-  Rotator/                IRotator, GS-232B serial driver, simulated rotator
+  Orbit/                  element download/cache, SGP4 predictor, pass finder, multi-satellite pass search
+  Rotator/                IRotator, GS-232B serial driver, simulated rotator, comm log
+  Radio/                  FlexRadio CAT and ICOM CI-V drivers, simulated radio, Doppler maths, radio controller
   Tracking/               pass planner (wrap/flip), tracking engine
   Time/                   real and simulation clocks
   Settings/               settings model and JSON store

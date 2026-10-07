@@ -1,10 +1,19 @@
 using System.Text.Json;
+using SatTrack.Core.Catalog;
 using SatTrack.Core.Geo;
+using SatTrack.Core.Radio;
 using SatTrack.Core.Tracking;
 
 namespace SatTrack.Core.Settings;
 
 public enum MapProjection { Mercator, Planar }
+
+/// <summary>Frequencies the user entered for one satellite.</summary>
+public sealed class SatFrequency
+{
+    public long? DownlinkHz { get; set; }
+    public long OffsetHz { get; set; }
+}
 
 public sealed class AppSettings
 {
@@ -30,6 +39,22 @@ public sealed class AppSettings
     public bool ParkAfterPass { get; set; }
     public double ParkAzimuth { get; set; } = 180;
     public double ParkElevation { get; set; }
+
+    // Radio
+    public RadioType RadioType { get; set; } = RadioType.FlexCat;
+    public string RadioComPort { get; set; } = "COM4";
+    public int RadioBaudRate { get; set; } = 9600;
+    public int RadioCivAddress { get; set; } = 0x74;
+
+    /// <summary>Retune when the corrected frequency has moved at least this far.</summary>
+    public int RadioStepHz { get; set; } = 10;
+    public RadioFollows RadioFollows { get; set; } = RadioFollows.Downlink;
+    public bool ShowFrequencyPanel { get; set; } = true;
+
+    /// <summary>Frequencies entered per satellite, keyed by <see cref="FrequencyKey"/>.</summary>
+    public Dictionary<string, SatFrequency> Frequencies { get; set; } = new();
+
+    public static string FrequencyKey(SatelliteEntry e) => e.NoradId > 0 ? e.NoradId.ToString() : "name:" + e.Name;
 
     // Satellites
     /// <summary>Path of a user satellite list, or null for the built-in list.</summary>

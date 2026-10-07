@@ -5,7 +5,7 @@ namespace SatTrack.Core.Rotator;
 
 public enum CommDirection { Tx, Rx, Info, Error }
 
-public readonly record struct CommLogEntry(DateTime Utc, CommDirection Direction, string Text)
+public readonly record struct CommLogEntry(DateTime Utc, CommDirection Direction, string Text, bool Routine = false)
 {
     public string DirectionLabel => Direction switch
     {
@@ -14,11 +14,6 @@ public readonly record struct CommLogEntry(DateTime Utc, CommDirection Direction
         CommDirection.Error => "ERR",
         _ => "INFO",
     };
-
-    /// <summary>True for routine position polling (C2 and its AZ=/EL= reply), which can be hidden.</summary>
-    public bool IsPositionPoll =>
-        (Direction == CommDirection.Tx && Text.StartsWith("C2", StringComparison.Ordinal)) ||
-        (Direction == CommDirection.Rx && Text.Contains("AZ=", StringComparison.Ordinal) && Text.Contains("EL=", StringComparison.Ordinal));
 
     public override string ToString() =>
         $"{Utc.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)}Z  {DirectionLabel,-4} {Text}";
@@ -45,14 +40,15 @@ public sealed class CommLog
 
     public DateTime StartedUtc { get; } = DateTime.UtcNow;
 
-    public void Tx(string text) => Add(CommDirection.Tx, text);
-    public void Rx(string text) => Add(CommDirection.Rx, text);
+    /// <param name="routine">True for periodic status polls, which the debug window can hide.</param>
+    public void Tx(string text, bool routine = false) => Add(CommDirection.Tx, text, routine);
+    public void Rx(string text, bool routine = false) => Add(CommDirection.Rx, text, routine);
     public void Info(string text) => Add(CommDirection.Info, text);
     public void Error(string text) => Add(CommDirection.Error, text);
 
-    public void Add(CommDirection direction, string text)
+    public void Add(CommDirection direction, string text, bool routine = false)
     {
-        var entry = new CommLogEntry(DateTime.UtcNow, direction, Escape(text));
+        var entry = new CommLogEntry(DateTime.UtcNow, direction, Escape(text), routine);
         lock (_lock)
         {
             _entries.Add(entry);
@@ -86,7 +82,7 @@ public sealed class CommLog
         }
     }
 
-    public void SaveTo(string path, string title)
+    public void SaveTo(string path, string title, string device = "controller")
     {
         List<CommLogEntry> copy;
         long dropped;
@@ -97,10 +93,10 @@ public sealed class CommLog
         }
 
         using var w = new StreamWriter(path, false, new UTF8Encoding(false));
-        w.WriteLine($"# {title}: serial communication log");
+        w.WriteLine($"# {title}: serial communication log ({device})");
         w.WriteLine($"# Saved {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z, session started {StartedUtc:yyyy-MM-dd HH:mm:ss}Z");
         w.WriteLine($"# {copy.Count} entries" + (dropped > 0 ? $" ({dropped} earlier entries were cleared or dropped)" : ""));
-        w.WriteLine("# TX = sent to controller, RX = received, \\r and \\n are carriage return and line feed");
+        w.WriteLine($"# TX = sent to the {device}, RX = received from it, \\r and \\n are carriage return and line feed");
         w.WriteLine();
         foreach (var e in copy) w.WriteLine(e.ToString());
     }

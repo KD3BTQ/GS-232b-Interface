@@ -73,8 +73,8 @@ public sealed class SimulatedRotator : IRotator
         {
             EnsureOpen();
             Advance();
-            Log?.Tx("C2\r");
-            Log?.Rx($"AZ={Math.Round(_az):000}  EL={Math.Round(_el):000}\r\n");
+            Log?.Tx("C2\r", routine: true);
+            Log?.Rx($"AZ={Math.Round(_az):000}  EL={Math.Round(_el):000}\r\n", routine: true);
             return QuantizeReadings
                 ? new RotatorPosition(Math.Round(_az), Math.Round(_el))
                 : new RotatorPosition(_az, _el);

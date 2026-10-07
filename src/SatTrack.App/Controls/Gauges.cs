@@ -68,54 +68,31 @@ public abstract class GaugeBase : Control
         var area = new RectangleF(pad, top, w - 2 * pad, h - top - pad);
         var readouts = GetReadouts();
 
-        bool wide = area.Width >= area.Height * (DialAspect + 0.75f);
-        if (wide)
-        {
-            float dialH = area.Height;
-            float dialW = dialH * DialAspect;
-            if (dialW > area.Width * 0.62f) { dialW = area.Width * 0.62f; dialH = dialW / DialAspect; }
-            var dial = new RectangleF(area.X, area.Y + (area.Height - dialH) / 2, dialW, dialH);
-            DrawDial(g, dial, k);
+        // Same layout for every gauge and every size: dial on the left, readouts in a fixed-width
+        // column on the right. Readouts never move between gauges or jump when resizing.
+        float roW = Math.Min(Math.Clamp(area.Width * 0.38f, 95f * k, 230f * k), area.Width * 0.5f);
+        var dialArea = new RectangleF(area.X, area.Y, area.Width - roW - pad, area.Height);
+        float dialW = Math.Min(dialArea.Width, dialArea.Height * DialAspect);
+        float dialH = dialW / DialAspect;
+        var dial = new RectangleF(dialArea.X + (dialArea.Width - dialW) / 2, dialArea.Y + (dialArea.Height - dialH) / 2, dialW, dialH);
+        if (dial.Width > 20 && dial.Height > 20) DrawDial(g, dial, k);
 
-            var ro = new RectangleF(dial.Right + pad * 1.5f, area.Y, area.Right - dial.Right - pad * 1.5f, area.Height);
-            DrawReadoutsColumn(g, ro, readouts, k);
-        }
-        else
-        {
-            float roH = Math.Clamp(area.Height * 0.3f, 30f * k, 70f * k);
-            float dialH = area.Height - roH - pad * 0.5f;
-            float dialW = Math.Min(area.Width, dialH * DialAspect);
-            dialH = dialW / DialAspect;
-            var dial = new RectangleF(area.X + (area.Width - dialW) / 2, area.Y, dialW, dialH);
-            DrawDial(g, dial, k);
-
-            var ro = new RectangleF(area.X, area.Bottom - roH, area.Width, roH);
-            DrawReadoutsRow(g, ro, readouts, k);
-        }
+        var ro = new RectangleF(area.Right - roW, area.Y, roW, area.Height);
+        DrawReadoutsColumn(g, ro, readouts, k);
     }
 
     private void DrawReadoutsColumn(Graphics g, RectangleF r, IReadOnlyList<Readout> items, float k)
     {
         if (items.Count == 0 || r.Width < 30) return;
         float rowH = r.Height / items.Count;
-        float valuePx = Math.Clamp(Math.Min(rowH * 0.5f, r.Width * 0.2f), 12f * k, 40f * k);
-        float labelPx = Math.Clamp(valuePx * 0.42f, 9.5f * k, 15f * k);
+        float valuePx = Math.Clamp(Math.Min(rowH * 0.48f, r.Width * 0.19f), 10f * k, 40f * k);
+        float labelPx = Math.Clamp(valuePx * 0.45f, 9f * k, 15f * k);
 
         for (int i = 0; i < items.Count; i++)
         {
-            float y = r.Y + i * rowH + (rowH - (valuePx + labelPx) * 1.2f) / 2;
+            float y = r.Y + i * rowH + Math.Max(0, (rowH - (valuePx * 1.3f + labelPx * 1.15f)) / 2);
             DrawReadout(g, items[i], r.X, y, r.Width, labelPx, valuePx);
         }
-    }
-
-    private void DrawReadoutsRow(Graphics g, RectangleF r, IReadOnlyList<Readout> items, float k)
-    {
-        if (items.Count == 0) return;
-        float colW = r.Width / items.Count;
-        float valuePx = Math.Clamp(Math.Min(r.Height * 0.48f, colW * 0.22f), 11f * k, 30f * k);
-        float labelPx = Math.Clamp(valuePx * 0.45f, 9f * k, 13f * k);
-        for (int i = 0; i < items.Count; i++)
-            DrawReadout(g, items[i], r.X + i * colW, r.Y, colW, labelPx, valuePx);
     }
 
     private void DrawReadout(Graphics g, Readout item, float x, float y, float width, float labelPx, float valuePx)

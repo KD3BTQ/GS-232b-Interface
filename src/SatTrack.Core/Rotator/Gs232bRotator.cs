@@ -187,7 +187,8 @@ public sealed class Gs232bRotator : IRotator
         {
             EnsureOpen();
             DiscardStale();
-            Log?.Tx(command + "\r");
+            bool routine = command == "C2";
+            Log?.Tx(command + "\r", routine);
             _port.Write(command + "\r");
 
             var buffer = new StringBuilder();
@@ -212,7 +213,7 @@ public sealed class Gs232bRotator : IRotator
                     {
                         // Pick up the rest of the line ending if it's already arrived.
                         if (_port.BytesToRead > 0) text += _port.ReadExisting();
-                        Log?.Rx(text);
+                        Log?.Rx(text, routine);
                         return m;
                     }
                 }

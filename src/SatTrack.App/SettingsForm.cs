@@ -1,5 +1,7 @@
 using System.IO.Ports;
 using SatTrack.Core.Geo;
+using System.Globalization;
+using SatTrack.Core.Radio;
 using SatTrack.Core.Settings;
 
 namespace SatTrack.App;
@@ -17,6 +19,13 @@ public sealed class SettingsForm : Form
     private readonly ComboBox _baud = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _azRange = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _elRange = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+
+    private readonly ComboBox _radioType = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _radioPort = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDown };
+    private readonly ComboBox _radioBaud = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly TextBox _civAddress = new() { Width = 50 };
+    private readonly NumericUpDown _radioStep = Num(1, 1000, 0, 1);
+    private readonly ComboBox _radioFollows = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
 
     private readonly NumericUpDown _threshold = Num(0.5m, 20, 1, 0.5m);
     private readonly NumericUpDown _lead = Num(0, 10, 1, 0.5m);
@@ -66,6 +75,16 @@ public sealed class SettingsForm : Form
         AddRow(rot, "Elevation travel", _elRange);
         root.Controls.Add(rot.Parent!);
 
+        // ---- Radio
+        var rad = Section("Radio");
+        AddRow(rad, "Radio type", _radioType);
+        AddRow(rad, "COM port", _radioPort);
+        AddRow(rad, "Baud rate", _radioBaud);
+        AddRow(rad, "ICOM CI-V address (hex)", _civAddress);
+        AddRow(rad, "Retune when frequency moves by (Hz)", _radioStep);
+        AddRow(rad, "Radio is tuned to", _radioFollows);
+        root.Controls.Add(rad.Parent!);
+
         // ---- Tracking
         var trk = Section("Tracking");
         AddRow(trk, "Move when target changes by (°)", _threshold);
@@ -113,6 +132,22 @@ public sealed class SettingsForm : Form
         _elRange.Items.AddRange(new object[] { "0–90°", "0–180° (allows flip over the top)" });
         _elRange.SelectedIndex = _settings.MaxElevation > 90 ? 1 : 0;
 
+        _radioType.Items.AddRange(new object[] { "FlexRadio (SmartSDR CAT port)", "ICOM (CI-V)" });
+        _radioType.SelectedIndex = _settings.RadioType == RadioType.IcomCiv ? 1 : 0;
+        _radioType.SelectedIndexChanged += (_, _) => _civAddress.Enabled = _radioType.SelectedIndex == 1;
+        _civAddress.Enabled = _radioType.SelectedIndex == 1;
+
+        var ports = SafePortNames();
+        foreach (var p in ports) _radioPort.Items.Add(p);
+        _radioPort.Text = _settings.RadioComPort;
+        foreach (int b in new[] { 4800, 9600, 19200, 38400, 57600, 115200 }) _radioBaud.Items.Add(b);
+        _radioBaud.SelectedItem = _settings.RadioBaudRate;
+        if (_radioBaud.SelectedIndex < 0) _radioBaud.SelectedItem = 9600;
+        _civAddress.Text = _settings.RadioCivAddress.ToString("X2");
+        _radioStep.Value = Clamp(_settings.RadioStepHz, _radioStep);
+        _radioFollows.Items.AddRange(new object[] { "Downlink (receive frequency)", "Uplink (transmit frequency)" });
+        _radioFollows.SelectedIndex = _settings.RadioFollows == RadioFollows.Uplink ? 1 : 0;
+
         _threshold.Value = Clamp(_settings.CommandThresholdDeg, _threshold);
         _lead.Value = Clamp(_settings.LeadSeconds, _lead);
         _prePosition.Value = Clamp(_settings.PrePositionMinutes, _prePosition);
@@ -157,6 +192,25 @@ public sealed class SettingsForm : Form
             _port.Focus();
             return;
         }
+
+        string civ = _civAddress.Text.Trim().TrimEnd('h', 'H').Replace("0x", "", StringComparison.OrdinalIgnoreCase);
+        bool icom = _radioType.SelectedIndex == 1;
+        if (!int.TryParse(civ, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int civAddr) || civAddr is < 0x01 or > 0xDF)
+            civAddr = icom ? -1 : _settings.RadioCivAddress;
+        if (civAddr < 0)
+        {
+            MessageBox.Show(this, "Enter the radio's CI-V address in hex, for example 74 for an IC-7700.", "CI-V address",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _civAddress.Focus();
+            return;
+        }
+
+        _settings.RadioType = _radioType.SelectedIndex == 1 ? RadioType.IcomCiv : RadioType.FlexCat;
+        _settings.RadioComPort = string.IsNullOrWhiteSpace(_radioPort.Text) ? _settings.RadioComPort : _radioPort.Text.Trim().ToUpperInvariant();
+        _settings.RadioBaudRate = (int)(_radioBaud.SelectedItem ?? 19200);
+        _settings.RadioCivAddress = civAddr;
+        _settings.RadioStepHz = (int)_radioStep.Value;
+        _settings.RadioFollows = _radioFollows.SelectedIndex == 1 ? RadioFollows.Uplink : RadioFollows.Downlink;
 
         _settings.LocationText = _location.Text.Trim();
         _settings.AltitudeMeters = (double)_altitude.Value;

@@ -6,6 +6,9 @@ using SGPdotNET.Propagation.Bodies;
 
 namespace SatTrack.App.Controls;
 
+/// <summary>A ground track drawn on the map. Highlighted traces are bold and labelled.</summary>
+public sealed record MapTrace(IReadOnlyList<GeoPoint> Points, bool Highlight, string? Label);
+
 /// <summary>
 /// World map with the station, satellite, ground track, coverage circle and day/night shading.
 /// The coastlines are rendered into a cached bitmap; only the moving parts redraw each frame.
@@ -25,6 +28,15 @@ public sealed class MapView : Control
 
     private Rectangle[] _projChips = Array.Empty<Rectangle>();
     private Rectangle[] _themeChips = Array.Empty<Rectangle>();
+
+    /// <summary>Extra ground tracks to draw (used by the Upcoming Passes window).</summary>
+    public IReadOnlyList<MapTrace> Traces { get; set; } = Array.Empty<MapTrace>();
+
+    /// <summary>Show the satellite info box in the top-left corner.</summary>
+    public bool ShowInfoBox { get; set; } = true;
+
+    /// <summary>Show the Dark/Light chips (the main window owns the theme).</summary>
+    public bool ShowThemeChips { get; set; } = true;
 
     public event Action<MapProjection>? ProjectionChosen;
     public event Action<bool>? DarkModeChosen;
@@ -136,6 +148,7 @@ public sealed class MapView : Control
         proj.SetClip(g);
 
         DrawNight(g, proj, snap?.UtcNow ?? DateTime.UtcNow);
+        DrawTraces(g, proj, k);
 
         if (snap is not null)
             DrawSatellite(g, proj, snap, k);
@@ -145,7 +158,7 @@ public sealed class MapView : Control
 
         g.Restore(savedClip);
 
-        DrawInfo(g, snap, w, h, k);
+        if (ShowInfoBox) DrawInfo(g, snap, w, h, k);
         DrawChips(g, w, h, k);
     }
 
@@ -240,6 +253,44 @@ public sealed class MapView : Control
             {
                 var font = Fonts.Get(12f * k, true);
                 DrawLabel(g, name, font, target, new PointF(p.X + r * 2, p.Y - r * 2 - font.Height / 2f));
+            }
+        }
+    }
+
+    private void DrawTraces(Graphics g, MapProjector proj, float k)
+    {
+        var traces = Traces;
+        if (traces.Count == 0) return;
+
+        using var faint = new Pen(Color.FromArgb(_palette.IsDark ? 110 : 140, _palette.TrackPast), 1f * k);
+        using var bold = new Pen(_palette.Target, 2.2f * k) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+        using var dot = new SolidBrush(_palette.Target);
+
+        foreach (var t in traces)
+            if (!t.Highlight) proj.DrawPolyline(g, faint, t.Points);
+
+        var font = Fonts.Get(11f * k, true);
+        foreach (var t in traces)
+        {
+            if (!t.Highlight || t.Points.Count == 0) continue;
+            proj.DrawPolyline(g, bold, t.Points);
+
+            // Dot and label where the pass starts (the rise end of the track), away from the
+            // station, where high passes would otherwise stack their labels.
+            var start = t.Points[0];
+            if (proj.TryPoint(start.Latitude, start.Longitude, out var sp))
+            {
+                g.FillEllipse(dot, sp.X - 3 * k, sp.Y - 3 * k, 6 * k, 6 * k);
+                if (t.Label is not null)
+                {
+                    var size = g.MeasureString(t.Label, font);
+                    var next = t.Points[Math.Min(3, t.Points.Count - 1)];
+                    // Put the label on the side away from the direction of travel.
+                    float dx = 0;
+                    if (proj.TryPoint(next.Latitude, next.Longitude, out var np)) dx = np.X - sp.X;
+                    float x = dx > 0 ? sp.X - size.Width - 4 * k : sp.X + 6 * k;
+                    DrawLabel(g, t.Label, font, _palette.Target, new PointF(x, sp.Y - size.Height / 2));
+                }
             }
         }
     }
@@ -355,11 +406,18 @@ public sealed class MapView : Control
 
         var projLabels = new[] { "Mercator", "Planar" };
         var themeLabels = new[] { "Dark", "Light" };
-        _themeChips = Layout(themeLabels, w - pad, h - pad);
-        _projChips = Layout(projLabels, _themeChips[0].Left - pad, h - pad);
-
+        if (ShowThemeChips)
+        {
+            _themeChips = Layout(themeLabels, w - pad, h - pad);
+            _projChips = Layout(projLabels, _themeChips[0].Left - pad, h - pad);
+            DrawSegments(g, _themeChips, themeLabels, _palette.IsDark ? 0 : 1, font, k);
+        }
+        else
+        {
+            _themeChips = Array.Empty<Rectangle>();
+            _projChips = Layout(projLabels, w - pad, h - pad);
+        }
         DrawSegments(g, _projChips, projLabels, _projection == MapProjection.Mercator ? 0 : 1, font, k);
-        DrawSegments(g, _themeChips, themeLabels, _palette.IsDark ? 0 : 1, font, k);
     }
 
     private void DrawSegments(Graphics g, Rectangle[] rects, string[] labels, int selected, Font font, float k)

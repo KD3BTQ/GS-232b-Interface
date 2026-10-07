@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using SatTrack.App.Controls;
 using SatTrack.Core.Catalog;
 using SatTrack.Core.Orbit;
+using SatTrack.Core.Radio;
 using SatTrack.Core.Rotator;
 using SatTrack.Core.Settings;
 using SatTrack.Core.Time;
@@ -20,7 +21,14 @@ public sealed class MainForm : Form
     private IRotator? _rotator;
     private readonly CommLog _commLog = new();
     private DebugForm? _debugForm;
+    private readonly RadioController _radio;
+    private readonly CommLog _radioLog = new();
+    private DebugForm? _radioDebugForm;
+    private bool _radioConnecting;
+    private string _seriesKey = "";
+    private int _seriesTick;
     private ManualSlewForm? _slewForm;
+    private PassesForm? _passesForm;
     private Palette _palette = Palette.Dark;
     private bool _simulating;
     private bool _connecting;
@@ -34,6 +42,7 @@ public sealed class MainForm : Form
     private readonly ToolStripButton _btnConnect = new("Connect") { ToolTipText = "Connect to the rotator and read its position" };
     private readonly ToolStripButton _btnEnable = new("Enable") { ToolTipText = "Allow the app to move the rotator (Esc disarms at any time)" };
     private readonly ToolStripButton _btnTrack = new("Track") { ToolTipText = "Follow the selected satellite" };
+    private readonly ToolStripButton _btnPasses = new("Upcoming passes") { ToolTipText = "Every pass of every satellite in the list (Ctrl+P)" };
     private readonly ToolStripLabel _lblSim = new("Simulation") { ToolTipText = "Simulation mode is on (Menu > Simulation mode to turn it off)" };
     private readonly ToolStripButton _btnNextPass = new("Next pass") { ToolTipText = "Jump the simulation clock to just before the next pass" };
     private readonly ToolStripComboBox _speedCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, AutoSize = false, Width = 64, ToolTipText = "Simulation speed" };
@@ -55,6 +64,10 @@ public sealed class MainForm : Form
     private readonly ToolStripStatusLabel _lblClock = new();
 
     private readonly MapView _map = new() { Dock = DockStyle.Fill, Margin = new Padding(0) };
+    private readonly FrequencyPanel _freq = new() { Dock = DockStyle.Fill, Margin = new Padding(3, 0, 0, 0) };
+    private readonly TableLayoutPanel _top = new() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0) };
+    private readonly ToolStripMenuItem _miFreqPanel = new("Show frequency panel");
+    private readonly ToolStripStatusLabel _lblRadio = new();
     private readonly AzimuthGauge _azGauge = new() { Dock = DockStyle.Fill, Margin = new Padding(0, 3, 2, 0) };
     private readonly ElevationGauge _elGauge = new() { Dock = DockStyle.Fill, Margin = new Padding(2, 3, 0, 0) };
 
@@ -65,6 +78,7 @@ public sealed class MainForm : Form
         _settings = SettingsStore.Load();
         _elements = new OrbitalElementsService(SettingsStore.ElementCacheFolder);
         _engine = new TrackingEngine(_elements);
+        _radio = new RadioController(() => _engine.Snapshot);
 
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
@@ -89,7 +103,12 @@ public sealed class MainForm : Form
         var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0), Padding = new Padding(3) };
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         content.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        content.Controls.Add(_map, 0, 0);
+        _top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        _top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        _top.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _top.Controls.Add(_map, 0, 0);
+        _top.Controls.Add(_freq, 1, 0);
+        content.Controls.Add(_top, 0, 0);
         content.Controls.Add(gauges, 0, 1);
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Margin = new Padding(0) };
@@ -107,6 +126,17 @@ public sealed class MainForm : Form
         PerformLayout();
 
         RestoreWindowBounds();
+
+        _radio.Message += msg =>
+        {
+            _radioLog.Info(msg);
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(new Action(() => ShowMessage(msg)));
+        };
+        _freq.ConnectClicked += async (_, _) => await OnRadioConnect();
+        _freq.EnableClicked += (_, _) => OnRadioEnable();
+        _freq.TrackClicked += (_, _) => OnRadioTrack();
+        _freq.FrequenciesChanged += OnFrequenciesChanged;
 
         _engine.Message += msg =>
         {
@@ -137,6 +167,7 @@ public sealed class MainForm : Form
         _btnConnect.Click += async (_, _) => await OnConnectClick();
         _btnEnable.Click += (_, _) => OnEnableClick();
         _btnTrack.Click += (_, _) => OnTrackClick();
+        _btnPasses.Click += (_, _) => ShowPassesWindow();
         _miSimulate.Click += async (_, _) => await ToggleSimulation();
         _btnNextPass.Click += (_, _) => JumpToNextPass();
         _btnOnTop.CheckedChanged += (_, _) => SetAlwaysOnTop(_btnOnTop.Checked);
@@ -148,8 +179,11 @@ public sealed class MainForm : Form
         var miLoad = new ToolStripMenuItem("Load satellite list…", null, (_, _) => LoadListFromFile());
         var miBuiltIn = new ToolStripMenuItem("Use built-in satellite list", null, (_, _) => LoadCatalog(null, showErrors: true));
         var miExport = new ToolStripMenuItem("Save built-in list as…", null, (_, _) => ExportBuiltIn());
+        var miPasses = new ToolStripMenuItem("Upcoming passes…", null, (_, _) => ShowPassesWindow()) { ShortcutKeys = Keys.Control | Keys.P };
         var miSlew = new ToolStripMenuItem("Manual slew…", null, (_, _) => ShowSlewWindow()) { ShortcutKeys = Keys.Control | Keys.M };
-        var miDebug = new ToolStripMenuItem("Serial debug window…", null, (_, _) => ShowDebugWindow()) { ShortcutKeys = Keys.Control | Keys.D };
+        var miDebug = new ToolStripMenuItem("Rotator serial debug…", null, (_, _) => ShowDebugWindow()) { ShortcutKeys = Keys.Control | Keys.D };
+        var miRadioDebug = new ToolStripMenuItem("Radio serial debug…", null, (_, _) => ShowRadioDebugWindow()) { ShortcutKeys = Keys.Control | Keys.R };
+        _miFreqPanel.Click += (_, _) => { _settings.ShowFrequencyPanel = !_settings.ShowFrequencyPanel; ApplyFrequencyPanelLayout(); };
         _miMercator.Click += (_, _) => SetProjection(MapProjection.Mercator);
         _miPlanar.Click += (_, _) => SetProjection(MapProjection.Planar);
         _miDark.Click += (_, _) => SetDarkMode(!_settings.DarkMode);
@@ -158,9 +192,9 @@ public sealed class MainForm : Form
         _menu.DropDownItems.AddRange(new ToolStripItem[]
         {
             miSettings, miUpdate, new ToolStripSeparator(),
-            miSlew, _miSimulate, miDebug, new ToolStripSeparator(),
+            miPasses, miSlew, _miSimulate, miDebug, miRadioDebug, new ToolStripSeparator(),
             miLoad, miBuiltIn, miExport, new ToolStripSeparator(),
-            _miMercator, _miPlanar, _miDark, new ToolStripSeparator(),
+            _miFreqPanel, _miMercator, _miPlanar, _miDark, new ToolStripSeparator(),
             _miOnTop,
         });
 
@@ -168,6 +202,7 @@ public sealed class MainForm : Form
         {
             _satCombo, new ToolStripSeparator(),
             _btnConnect, _btnEnable, _btnTrack, new ToolStripSeparator(),
+            _btnPasses, new ToolStripSeparator(),
             _lblSim, _btnNextPass, _speedCombo,
             _menu, _btnOnTop,
         });
@@ -176,7 +211,7 @@ public sealed class MainForm : Form
     private void BuildStatusBar()
     {
         _lblStation.Click += (_, _) => OpenSettings(null);
-        _status.Items.AddRange(new ToolStripItem[] { _lblConn, _lblArm, _lblStation, _lblData, _lblMsg, _lblClock });
+        _status.Items.AddRange(new ToolStripItem[] { _lblConn, _lblArm, _lblRadio, _lblStation, _lblData, _lblMsg, _lblClock });
         foreach (ToolStripItem item in _status.Items) item.Margin = new Padding(6, 3, 6, 2);
     }
 
@@ -193,9 +228,12 @@ public sealed class MainForm : Form
 
         _elements.LoadCache();
         ApplyEngineConfig();
+        ApplyRadioConfig();
+        ApplyFrequencyPanelLayout();
         LoadCatalog(_settings.CatalogPath, showErrors: false);
 
         _engine.Start();
+        _radio.Start();
         _timer.Start();
         UpdateSimulationUi();
     }
@@ -216,6 +254,7 @@ public sealed class MainForm : Form
         _timer.Stop();
         SaveWindowBounds();
         TrySaveSettings();
+        _radio.Dispose();  // stops sending frequency commands
         _engine.Dispose(); // disarms and stops the rotator
         base.OnFormClosing(e);
     }
@@ -225,6 +264,7 @@ public sealed class MainForm : Form
         if (keyData == Keys.Escape)
         {
             _engine.Disarm();
+            _radio.Disarm();
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
@@ -300,6 +340,28 @@ public sealed class MainForm : Form
         string clock = $"{snap.UtcNow:HH:mm:ss}Z";
         SetStatus(_lblClock, snap.Simulating ? $"Simulated {clock}  {snap.ClockRate:0}×" : clock,
                   snap.Simulating ? _palette.Target : _palette.Text);
+
+        // Radio and frequency panel.
+        var rs = _radio.Snapshot;
+        if (_freq.Visible)
+        {
+            _freq.UpdateState(rs, snap, _radioConnecting);
+            string key = $"{snap.SatelliteName}|{snap.Pass?.AosUtc:O}|{rs.NominalDownlinkHz}";
+            if (key != _seriesKey || ++_seriesTick % 20 == 0) RefreshDopplerSeries(snap, key);
+        }
+        switch (rs.Connection)
+        {
+            case RotatorConnection.Connected:
+                SetStatus(_lblRadio, rs.Armed ? "Radio enabled" : "Radio connected", rs.Armed ? _palette.Danger : _palette.Good);
+                break;
+            case RotatorConnection.Lost:
+                SetStatus(_lblRadio, "Radio connection lost", _palette.Danger);
+                break;
+            default:
+                SetStatus(_lblRadio, _radioConnecting ? "Radio connecting…" : _freq.Visible ? "Radio not connected" : "", _palette.TextDim);
+                break;
+        }
+        _lblRadio.ToolTipText = rs.Description ?? "";
 
         // Every minute: refresh orbital data when it has gone stale.
         if (++_tick % 600 == 0 && _elements.IsStale && !_refreshing)
@@ -406,6 +468,8 @@ public sealed class MainForm : Form
             await _engine.DisconnectAsync();
             _rotator = null;
         }
+        if (_radio.Snapshot.Connection != RotatorConnection.Disconnected)
+            await _radio.DisconnectAsync();
 
         _simulating = on;
         if (on)
@@ -414,6 +478,7 @@ public sealed class MainForm : Form
             _engine.SetClock(_simClock);
             ShowMessage("Simulation on. Connect uses a simulated rotator; Next pass skips ahead in time.");
             _commLog.Info("Simulation mode on");
+            _radioLog.Info("Simulation mode on");
         }
         else
         {
@@ -421,6 +486,7 @@ public sealed class MainForm : Form
             _simClock = null;
             ShowMessage("Simulation off. Back to real time.");
             _commLog.Info("Simulation mode off");
+            _radioLog.Info("Simulation mode off");
         }
         UpdateSimulationUi();
     }
@@ -514,6 +580,9 @@ public sealed class MainForm : Form
         _settings.SelectedNoradId = entry?.NoradId;
         _settings.SelectedName = entry?.Name;
         _satCombo.ToolTipText = entry?.Notes ?? entry?.Name ?? "";
+
+        if (_radio.IsTracking) _radio.StopTracking();
+        LoadFrequenciesFor(entry);
     }
 
     private void LoadListFromFile()
@@ -583,9 +652,147 @@ public sealed class MainForm : Form
             _debugForm.Activate();
             return;
         }
-        _debugForm = new DebugForm(_commLog) { Owner = this };
+        _debugForm = new DebugForm(_commLog, "rotator", "GS232B-serial") { Owner = this };
         _debugForm.FormClosed += (_, _) => _debugForm = null;
         _debugForm.Show(this);
+    }
+
+    private void ShowRadioDebugWindow()
+    {
+        if (_radioDebugForm is { IsDisposed: false })
+        {
+            if (_radioDebugForm.WindowState == FormWindowState.Minimized) _radioDebugForm.WindowState = FormWindowState.Normal;
+            _radioDebugForm.Activate();
+            return;
+        }
+        _radioDebugForm = new DebugForm(_radioLog, "radio", "radio-serial") { Owner = this };
+        _radioDebugForm.FormClosed += (_, _) => _radioDebugForm = null;
+        _radioDebugForm.Show(this);
+    }
+
+    // ---------------------------------------------------------------- radio
+
+    private async Task OnRadioConnect()
+    {
+        if (_radio.Snapshot.Connection == RotatorConnection.Connected)
+        {
+            await _radio.DisconnectAsync();
+            return;
+        }
+
+        byte addr = (byte)Math.Clamp(_settings.RadioCivAddress, 1, 0xDF);
+        IRadio radio = _simulating
+            ? new SimulatedRadio(_radio.Snapshot.NominalDownlinkHz ?? 14_074_000) { RadioAddress = addr, Log = _radioLog, Protocol = _settings.RadioType }
+            : _settings.RadioType == RadioType.FlexCat
+                ? new FlexCatRadio(_settings.RadioComPort, _settings.RadioBaudRate) { Log = _radioLog }
+                : new IcomCivRadio(_settings.RadioComPort, _settings.RadioBaudRate) { RadioAddress = addr, Log = _radioLog };
+
+        _radioConnecting = true;
+        try
+        {
+            await _radio.ConnectAsync(radio);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage("Radio connection failed.");
+            MessageBox.Show(this, ex.Message, "Couldn't connect to the radio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _radioConnecting = false;
+        }
+    }
+
+    private void OnRadioEnable()
+    {
+        if (_radio.IsArmed) { _radio.Disarm(); return; }
+        if (!_radio.Arm()) ShowMessage("Connect to the radio before enabling it.");
+    }
+
+    private void OnRadioTrack()
+    {
+        if (_radio.IsTracking) _radio.StopTracking();
+        else _radio.StartTracking();
+    }
+
+    private void LoadFrequenciesFor(SatelliteEntry? entry)
+    {
+        long? down = null;
+        long offset = 0;
+        if (entry is not null)
+        {
+            if (_settings.Frequencies.TryGetValue(AppSettings.FrequencyKey(entry), out var f))
+            {
+                down = f.DownlinkHz;
+                offset = f.OffsetHz;
+            }
+            else if (entry.DownlinkMHz is double mhz)
+            {
+                down = (long)Math.Round(mhz * 1e6);
+                offset = (long)Math.Round((entry.OffsetMHz ?? 0) * 1e6);
+            }
+        }
+        _freq.SetFrequencies(down, offset);
+        _radio.SetFrequencies(down, offset);
+        _seriesKey = "";
+    }
+
+    private void OnFrequenciesChanged(long? downlinkHz, long offsetHz)
+    {
+        if (_satCombo.SelectedItem is SatelliteEntry entry)
+            _settings.Frequencies[AppSettings.FrequencyKey(entry)] = new SatFrequency { DownlinkHz = downlinkHz, OffsetHz = offsetHz };
+        _radio.SetFrequencies(downlinkHz, offsetHz);
+        _seriesKey = "";
+    }
+
+    private void RefreshDopplerSeries(TrackerSnapshot snap, string key)
+    {
+        _seriesKey = key;
+        DateTime from, to;
+        if (snap.Pass is { NeverSets: false } p)
+        {
+            from = p.AosUtc - TimeSpan.FromMinutes(2);
+            to = p.LosUtc + TimeSpan.FromMinutes(2);
+        }
+        else
+        {
+            from = snap.UtcNow - TimeSpan.FromMinutes(30);
+            to = snap.UtcNow + TimeSpan.FromMinutes(30);
+        }
+        _freq.Doppler.Series = _engine.RangeRateSeries(from, to, 200);
+    }
+
+    private void ApplyRadioConfig() => _radio.SetOptions(_settings.RadioStepHz, _settings.RadioFollows);
+
+    private void ApplyFrequencyPanelLayout()
+    {
+        bool show = _settings.ShowFrequencyPanel;
+        _top.SuspendLayout();
+        _top.ColumnStyles[0] = new ColumnStyle(SizeType.Percent, show ? 50 : 100);
+        _top.ColumnStyles[1] = new ColumnStyle(SizeType.Percent, show ? 50 : 0);
+        _freq.Visible = show;
+        _top.ResumeLayout(true);
+        _miFreqPanel.Checked = show;
+        _seriesKey = "";
+    }
+
+    private void ShowPassesWindow()
+    {
+        if (_passesForm is { IsDisposed: false })
+        {
+            if (_passesForm.WindowState == FormWindowState.Minimized) _passesForm.WindowState = FormWindowState.Normal;
+            _passesForm.Activate();
+            return;
+        }
+        _passesForm = new PassesForm(_elements, () => _catalog, () => _settings, () => _engine.Clock.UtcNow,
+                                     _palette, _settings.Projection) { Owner = this };
+        _passesForm.SatelliteChosen += entry =>
+        {
+            _satCombo.SelectedItem = entry;
+            ShowMessage($"Selected {entry.Name}.");
+        };
+        _passesForm.FormClosed += (_, _) => _passesForm = null;
+        _passesForm.Show(this);
     }
 
     private void ShowSlewWindow()
@@ -611,6 +818,9 @@ public sealed class MainForm : Form
         _settings = dlg.Result;
         TrySaveSettings();
         ApplyEngineConfig();
+        ApplyRadioConfig();
+        if (_radio.Snapshot.Connection == RotatorConnection.Connected)
+            ShowMessage("Radio type, port or CI-V changes take effect the next time you connect the radio.");
 
         // Keep a connected rotator's travel limits in step with the settings.
         switch (_rotator)
@@ -691,6 +901,9 @@ public sealed class MainForm : Form
         _lblMsg.ForeColor = _palette.TextDim;
 
         _map.Palette = _palette;
+        _freq.Palette = _palette;
+        if (_passesForm is { IsDisposed: false }) _passesForm.ApplyPalette(_palette);
+        _top.BackColor = _palette.Window;
         _azGauge.Palette = _palette;
         _elGauge.Palette = _palette;
         _miDark.Checked = _settings.DarkMode;

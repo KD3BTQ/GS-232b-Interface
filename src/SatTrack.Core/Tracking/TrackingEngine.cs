@@ -230,6 +230,23 @@ public sealed class TrackingEngine : IDisposable
         return pass;
     }
 
+    /// <summary>Range rate (km/s, positive = moving away) over a time window, for Doppler plots.</summary>
+    public List<(DateTime Utc, double RangeRateKmS, double Elevation)> RangeRateSeries(DateTime fromUtc, DateTime toUtc, int points)
+    {
+        SatellitePredictor? p;
+        lock (_gate) p = _predictor;
+        var list = new List<(DateTime, double, double)>();
+        if (p is null || points < 2 || toUtc <= fromUtc) return list;
+
+        var step = TimeSpan.FromTicks((toUtc - fromUtc).Ticks / (points - 1));
+        for (int i = 0; i < points; i++)
+        {
+            var t = fromUtc + TimeSpan.FromTicks(step.Ticks * i);
+            if (p.Observe(t) is LookAngles l) list.Add((t, l.RangeRateKmS, l.Elevation));
+        }
+        return list;
+    }
+
     // ------------------------------------------------------------------ rotator control
 
     /// <summary>
