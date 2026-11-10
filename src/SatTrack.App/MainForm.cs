@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using SatTrack.App.Controls;
 using SatTrack.Core.Catalog;
@@ -39,6 +40,7 @@ public sealed class MainForm : Form
     // ---------------------------------------------------------------- controls
     private readonly ToolStrip _tool = new() { GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(4, 2, 4, 2) };
     private readonly ToolStripComboBox _satCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, AutoSize = false, Width = 180, MaxDropDownItems = 24 };
+    private readonly ToolStripSplitButton _btnInfo = new("Info") { ToolTipText = "Open this satellite's page online" };
     private readonly ToolStripButton _btnConnect = new("Connect") { ToolTipText = "Connect to the rotator and read its position" };
     private readonly ToolStripButton _btnEnable = new("Enable") { ToolTipText = "Allow the app to move the rotator (Esc disarms at any time)" };
     private readonly ToolStripButton _btnTrack = new("Track") { ToolTipText = "Follow the selected satellite" };
@@ -65,7 +67,7 @@ public sealed class MainForm : Form
 
     private readonly MapView _map = new() { Dock = DockStyle.Fill, Margin = new Padding(0) };
     private readonly FrequencyPanel _freq = new() { Dock = DockStyle.Fill, Margin = new Padding(3, 0, 0, 0) };
-    private readonly TableLayoutPanel _top = new() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0) };
+    private readonly DashboardLayout _dash;
     private readonly ToolStripMenuItem _miFreqPanel = new("Show frequency panel");
     private readonly ToolStripStatusLabel _lblRadio = new();
     private readonly AzimuthGauge _azGauge = new() { Dock = DockStyle.Fill, Margin = new Padding(0, 3, 2, 0) };
@@ -85,42 +87,24 @@ public sealed class MainForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9f);
         Text = AppInfo.Name;
+        if (AppInfo.Icon is { } appIcon) Icon = appIcon;
         MinimumSize = new Size(560, 360);
         Size = new Size(1100, 720);
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
 
         BuildToolbar();
+        BuildInfoButton();
         BuildStatusBar();
 
-        var gauges = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0) };
-        gauges.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        gauges.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        gauges.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        gauges.Controls.Add(_azGauge, 0, 0);
-        gauges.Controls.Add(_elGauge, 1, 0);
-
-        var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(0), Padding = new Padding(3) };
-        content.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        content.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        _top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        _top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        _top.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _top.Controls.Add(_map, 0, 0);
-        _top.Controls.Add(_freq, 1, 0);
-        content.Controls.Add(_top, 0, 0);
-        content.Controls.Add(gauges, 0, 1);
-
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Margin = new Padding(0) };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _tool.Dock = DockStyle.Fill;
-        _status.Dock = DockStyle.Fill;
-        root.Controls.Add(_tool, 0, 0);
-        root.Controls.Add(content, 0, 1);
-        root.Controls.Add(_status, 0, 2);
-        Controls.Add(root);
+        // Map, frequency panel and gauges are placed by DashboardLayout, which sizes them
+        // directly from the window. The toolbar and status bar dock to the top and bottom.
+        _dash = new DashboardLayout(_map, _freq, _azGauge, _elGauge) { Dock = DockStyle.Fill };
+        _tool.Dock = DockStyle.Top;
+        _status.Dock = DockStyle.Bottom;
+        Controls.Add(_dash);    // added first so it fills what the strips leave
+        Controls.Add(_tool);
+        Controls.Add(_status);
 
         ResumeLayout(false);
         PerformLayout();
@@ -200,7 +184,7 @@ public sealed class MainForm : Form
 
         _tool.Items.AddRange(new ToolStripItem[]
         {
-            _satCombo, new ToolStripSeparator(),
+            _satCombo, _btnInfo, new ToolStripSeparator(),
             _btnConnect, _btnEnable, _btnTrack, new ToolStripSeparator(),
             _btnPasses, new ToolStripSeparator(),
             _lblSim, _btnNextPass, _speedCombo,
@@ -364,6 +348,8 @@ public sealed class MainForm : Form
         _lblRadio.ToolTipText = rs.Description ?? "";
 
         // Every minute: refresh orbital data when it has gone stale.
+        if (_tick % 5 == 0) UpdateInfoButton();
+
         if (++_tick % 600 == 0 && _elements.IsStale && !_refreshing)
             _ = RefreshElementsAsync(force: false);
     }
@@ -553,11 +539,13 @@ public sealed class MainForm : Form
 
         _populatingCombo = true;
         _satCombo.Items.Clear();
-        foreach (var s in catalog.Satellites) _satCombo.Items.Add(s);
+        // The list is shown alphabetically (numbers in names sorted as numbers: AO-7, AO-27, AO-123).
+        var sorted = catalog.Satellites.OrderBy(s => s.Name, NaturalNameComparer.Instance).ToList();
+        foreach (var s in sorted) _satCombo.Items.Add(s);
 
         var previous = catalog.Satellites.FirstOrDefault(s => s.NoradId > 0 && s.NoradId == _settings.SelectedNoradId)
                     ?? catalog.Satellites.FirstOrDefault(s => s.Name == _settings.SelectedName)
-                    ?? catalog.Satellites[0];
+                    ?? sorted[0];
         _satCombo.SelectedItem = previous;
         _populatingCombo = false;
         OnSatelliteChanged();
@@ -767,13 +755,72 @@ public sealed class MainForm : Form
     private void ApplyFrequencyPanelLayout()
     {
         bool show = _settings.ShowFrequencyPanel;
-        _top.SuspendLayout();
-        _top.ColumnStyles[0] = new ColumnStyle(SizeType.Percent, show ? 50 : 100);
-        _top.ColumnStyles[1] = new ColumnStyle(SizeType.Percent, show ? 50 : 0);
         _freq.Visible = show;
-        _top.ResumeLayout(true);
+        _dash.ShowFrequency = show;
         _miFreqPanel.Checked = show;
         _seriesKey = "";
+    }
+
+    // ---------------------------------------------------------------- satellite info links
+
+    private void BuildInfoButton()
+    {
+        foreach (InfoSite site in Enum.GetValues(typeof(InfoSite)))
+        {
+            var item = new ToolStripMenuItem(SatelliteLinks.Title(site)) { Tag = site };
+            item.Click += (_, _) =>
+            {
+                // Picking a site from the list also makes it the one-click default.
+                _settings.InfoSite = site;
+                UpdateInfoButton();
+                OpenInfo(site);
+            };
+            _btnInfo.DropDownItems.Add(item);
+        }
+        _btnInfo.ButtonClick += (_, _) => OpenInfo(_settings.InfoSite);
+        UpdateInfoButton();
+    }
+
+    private void UpdateInfoButton()
+    {
+        var entry = _satCombo.SelectedItem as SatelliteEntry;
+        var elements = _engine.Snapshot.Elements;
+        string? url = entry is null ? null : SatelliteLinks.Url(_settings.InfoSite, entry, elements);
+
+        _btnInfo.Enabled = entry is not null;
+        string tip = entry is null ? "Choose a satellite first"
+                   : url is null ? $"No {SatelliteLinks.ShortName(_settings.InfoSite)} page for {entry.Name}; pick another site from the arrow"
+                   : $"Open {entry.Name} on {SatelliteLinks.ShortName(_settings.InfoSite)} (arrow: choose another site)";
+        if (_btnInfo.ToolTipText != tip) _btnInfo.ToolTipText = tip;
+
+        foreach (ToolStripItem item in _btnInfo.DropDownItems)
+            if (item is ToolStripMenuItem mi && mi.Tag is InfoSite site)
+            {
+                mi.Checked = site == _settings.InfoSite;
+                mi.Enabled = entry is not null && SatelliteLinks.Url(site, entry, elements) is not null;
+            }
+    }
+
+    private void OpenInfo(InfoSite site)
+    {
+        if (_satCombo.SelectedItem is not SatelliteEntry entry) return;
+        string? url = SatelliteLinks.Url(site, entry, _engine.Snapshot.Elements);
+        if (url is null)
+        {
+            ShowMessage(entry.HasInlineElements && site == InfoSite.OrbitalElements
+                ? $"{entry.Name}'s elements come from your satellite list file, not an online source."
+                : $"{entry.Name} has no catalog number, so there's no {SatelliteLinks.ShortName(site)} page.");
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            ShowMessage($"Opened {SatelliteLinks.ShortName(site)} for {entry.Name} in your browser.");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Couldn't open the browser: {ex.Message}");
+        }
     }
 
     private void ShowPassesWindow()
@@ -893,6 +940,8 @@ public sealed class MainForm : Form
             combo.ComboBox.ForeColor = _palette.Text;
         }
         foreach (ToolStripItem item in _menu.DropDownItems) item.ForeColor = _palette.Text;
+        _btnInfo.DropDown.Renderer = renderer;
+        foreach (ToolStripItem item in _btnInfo.DropDownItems) item.ForeColor = _palette.Text;
         _lblSim.ForeColor = _palette.Target;
         _lblSim.Tag = "keepcolor";
 
@@ -903,7 +952,7 @@ public sealed class MainForm : Form
         _map.Palette = _palette;
         _freq.Palette = _palette;
         if (_passesForm is { IsDisposed: false }) _passesForm.ApplyPalette(_palette);
-        _top.BackColor = _palette.Window;
+        _dash.BackColor = _palette.Window;
         _azGauge.Palette = _palette;
         _elGauge.Palette = _palette;
         _miDark.Checked = _settings.DarkMode;

@@ -42,6 +42,7 @@ public sealed class DebugForm : Form
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = $"{AppInfo.Name}: {device} serial debug";
+        if (AppInfo.Icon is { } appIcon) Icon = appIcon;
         Size = new Size(760, 420);
         MinimumSize = new Size(420, 200);
         StartPosition = FormStartPosition.CenterParent;

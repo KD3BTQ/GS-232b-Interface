@@ -23,6 +23,9 @@ public sealed class DopplerView : Control
         TabStop = false;
     }
 
+    /// <summary>Report a tiny preferred size so containers can always shrink this control.</summary>
+    public override Size GetPreferredSize(Size proposedSize) => new(1, 1);
+
     public Palette Palette { get => _palette; set { _palette = value; Invalidate(); } }
 
     public void SetData(RadioSnapshot radio, TrackerSnapshot tracker)

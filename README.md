@@ -41,6 +41,8 @@ To build an installer, publish as above, then open `installer/GS232B-Interface.i
 
 | Control | What it does |
 |---|---|
+| Satellite list | Top left. Sorted alphabetically, with numbers in names in numeric order (AO-7, AO-27, AO-123). |
+| **Info** | Opens the selected satellite's page in your browser with one click. The arrow beside it chooses the site: N2YO (description and live position, the default), the CelesTrak catalog record, the orbital elements the app is using (from AMSAT or CelesTrak), or AMSAT's amateur satellite status page. Whichever you pick becomes the one-click default. |
 | **Connect** | Opens the COM port, asks the controller for its position (`C2`) and shows it on the gauges. If the controller doesn't answer you get a message saying why. |
 | **Enable** | Arms the app. It sends no movement commands until you press this. When armed, the button turns red and reads **Disarm**. |
 | **Disarm** / **Esc** | Stops sending commands and sends `S` (all stop) immediately. Esc works from anywhere in the window. Disconnecting or closing the app also disarms. |
@@ -175,6 +177,12 @@ The built-in list has 96 satellites from AMSAT's daily element distribution, wit
 - **Rotator points the wrong way by 180°:** the app expects controller azimuth 0 to be north. If your controller is set up for south-centre operation, switch it back to north-centre.
 - **Motion lags the satellite:** increase *Aim ahead of the satellite* in Settings. Speed also affects this; the GS-232B `X1`–`X4` speed commands are available in `Gs232bRotator` if you want to add a control for them.
 
+## App icon
+
+The icon (a Cassegrain dish on its pedestal tower at twilight, talking to a satellite) is `src/SatTrack.App/Resources/app.ico`. The project file's `<ApplicationIcon>` setting builds it into the exe, so `dotnet publish` output and the installer both carry it. It's used for the exe, the window title bars, the taskbar and the installer. To use your own, replace that file with any `.ico` that includes 16, 32, 48 and 256 px sizes and rebuild. `tools/make_icon.py` (Python + Pillow) regenerates the original: run it in `tools/` and copy the resulting `app.ico` into `src/SatTrack.App/Resources/`.
+
+If Explorer still shows the old icon after rebuilding, that's Windows' icon cache: rename the exe or sign out and back in.
+
 ## Project layout
 
 ```
@@ -191,6 +199,8 @@ src/SatTrack.Core/        tracking logic, no UI (net8.0)
 src/SatTrack.App/         WinForms UI (net8.0-windows)
   Controls/               map view + projections, azimuth/elevation gauges
 third_party/SGP.NET/      SGP4 library, MIT licence (vendored 1.6.0 source)
+installer/                Inno Setup script
+tools/make_icon.py        draws the app icon
 ```
 
 The tracking engine runs on a background thread and publishes an immutable snapshot that the UI reads ten times a second. All rotator I/O goes through one gate. A disarm is therefore always processed after any move command that's already in flight, and no new move can be sent once it has been processed.

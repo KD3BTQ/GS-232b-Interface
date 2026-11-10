@@ -60,6 +60,9 @@ public sealed class AppSettings
     /// <summary>Path of a user satellite list, or null for the built-in list.</summary>
     public string? CatalogPath { get; set; }
     public int? SelectedNoradId { get; set; }
+
+    /// <summary>Which web page the Info button opens with a single click.</summary>
+    public InfoSite InfoSite { get; set; } = InfoSite.N2yo;
     public string? SelectedName { get; set; }
 
     // View

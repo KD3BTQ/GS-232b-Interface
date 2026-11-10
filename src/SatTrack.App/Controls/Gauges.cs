@@ -36,6 +36,9 @@ public abstract class GaugeBase : Control
         set { _snapshot = value; Invalidate(); }
     }
 
+    /// <summary>Report a tiny preferred size so containers can always shrink this control.</summary>
+    public override Size GetPreferredSize(Size proposedSize) => new(1, 1);
+
     protected abstract string Title { get; }
 
     /// <summary>Width/height ratio the dial wants (1 for a circle, 2 for a half circle).</summary>
