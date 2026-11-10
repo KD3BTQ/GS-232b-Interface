@@ -12,6 +12,7 @@
     <AssemblyName>GS232B-Interface</AssemblyName>
     <Product>GS-232B Interface Software</Product>
     <Version>1.0.0</Version>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +21,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\world.txt" LogicalName="SatTrack.App.world.txt" />
+    <EmbeddedResource Include="Resources\app.ico" LogicalName="SatTrack.App.app.ico" />
   </ItemGroup>
 
 </Project>

@@ -67,6 +67,7 @@ public sealed class PassesForm : Form
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = $"{AppInfo.Name}: upcoming passes";
+        if (AppInfo.Icon is { } appIcon) Icon = appIcon;
         Size = new Size(1000, 720);
         MinimumSize = new Size(560, 400);
         StartPosition = FormStartPosition.CenterParent;

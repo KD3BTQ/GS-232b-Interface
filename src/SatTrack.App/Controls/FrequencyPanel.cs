@@ -26,6 +26,8 @@ public sealed class FrequencyPanel : UserControl
 
     public DopplerView Doppler { get; } = new() { Dock = DockStyle.Fill, Margin = new Padding(0) };
 
+    public override Size GetPreferredSize(Size proposedSize) => new(1, 1);
+
     public event EventHandler? ConnectClicked;
     public event EventHandler? EnableClicked;
     public event EventHandler? TrackClicked;
@@ -46,6 +48,7 @@ public sealed class FrequencyPanel : UserControl
         inputs.Controls.AddRange(new Control[] { _downLabel, _down, _offLabel, _offset });
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Margin = new Padding(0) };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // without this the column grows but never shrinks
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));

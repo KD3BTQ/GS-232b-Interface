@@ -69,6 +69,9 @@ public sealed class MapView : Control
         set { _snapshot = value; Invalidate(); }
     }
 
+    /// <summary>Report a tiny preferred size so containers can always shrink this control.</summary>
+    public override Size GetPreferredSize(Size proposedSize) => new(1, 1);
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) _base?.Dispose();
